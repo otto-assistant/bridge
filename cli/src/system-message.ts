@@ -211,6 +211,8 @@ export type ThreadStartMarker = {
   cliThreadPrompt?: boolean
   /** Worktree name to create */
   worktree?: string
+  /** Existing worktree directory to use as working directory (must be a git worktree of the project) */
+  cwd?: string
   /** Discord username who initiated the thread */
   username?: string
   /** Discord user ID who initiated the thread */
@@ -314,6 +316,7 @@ export function getOpencodeSystemMessage({
   threadId,
   channelTopic,
   agents,
+  username,
 }: {
   sessionId: string
   channelId?: string
@@ -323,7 +326,9 @@ export function getOpencodeSystemMessage({
   threadId?: string
   channelTopic?: string
   agents?: AgentInfo[]
+  username?: string
 }) {
+  const userArg = ` --user ${JSON.stringify(username || 'username')}`
   const topicContext = channelTopic?.trim()
     ? `\n\n<channel-topic>\n${channelTopic.trim()}\n</channel-topic>`
     : ''
@@ -404,7 +409,7 @@ ${
 
 To start a new thread/session in this channel pro-grammatically, run:
 
-kimaki send --channel ${channelId} --prompt "your prompt here"
+kimaki send --channel ${channelId} --prompt "your prompt here"${userArg}
 
 You can use this to "spawn" parallel helper sessions like teammates: start new threads with focused prompts, then come back and collect the results.
 
@@ -424,25 +429,30 @@ Use this when you have the OpenCode session ID.
 
 Use --notify-only to create a notification thread without starting an AI session:
 
-kimaki send --channel ${channelId} --prompt "User cancelled subscription" --notify-only
+kimaki send --channel ${channelId} --prompt "User cancelled subscription" --notify-only${userArg}
 
 Use --user to add a specific Discord user to the new thread:
 
-kimaki send --channel ${channelId} --prompt "Review the latest CI failure" --user "username"
+kimaki send --channel ${channelId} --prompt "Review the latest CI failure"${userArg}
 
 Use --worktree to create a git worktree for the session (ONLY when the user explicitly asks for a worktree):
 
-kimaki send --channel ${channelId} --prompt "Add dark mode support" --worktree dark-mode
+kimaki send --channel ${channelId} --prompt "Add dark mode support" --worktree dark-mode${userArg}
+
+Use --cwd to start a session in an existing git worktree directory (must be a worktree of the project):
+
+kimaki send --channel ${channelId} --prompt "Continue work on feature" --cwd /path/to/existing-worktree${userArg}
 
 Important:
 - NEVER use \`--worktree\` unless the user explicitly requests a worktree. Most tasks should use normal threads without worktrees.
+- Use \`--cwd\` to reuse an existing worktree directory. Use \`--worktree\` to create a new one.
 - The prompt passed to \`--worktree\` is the task for the new thread running inside that worktree.
 - Do NOT tell that prompt to "create a new worktree" again, or it can create recursive worktree threads.
 - Ask the new session to operate on its current checkout only (e.g. "validate current worktree", "run checks in this repo").
 
 Use --agent to specify which agent to use for the session:
 
-kimaki send --channel ${channelId} --prompt "Plan the refactor of the auth module" --agent plan
+kimaki send --channel ${channelId} --prompt "Plan the refactor of the auth module" --agent plan${userArg}
 ${availableAgentsContext}
 
 ## switching agents in the current session
@@ -453,8 +463,8 @@ The user can switch the active agent mid-session using the Discord slash command
 
 Use \`--send-at\` to schedule a one-time or recurring task:
 
-kimaki send --channel ${channelId} --prompt "Reminder: review open PRs" --send-at "2026-03-01T09:00:00Z"
-kimaki send --channel ${channelId} --prompt "Run weekly test suite and summarize failures" --send-at "0 9 * * 1"
+kimaki send --channel ${channelId} --prompt "Reminder: review open PRs" --send-at "2026-03-01T09:00:00Z"${userArg}
+kimaki send --channel ${channelId} --prompt "Run weekly test suite and summarize failures" --send-at "0 9 * * 1"${userArg}
 
 ALL scheduling is in UTC. Dates must be UTC ISO format ending with \`Z\`. Cron expressions also fire in UTC (e.g. \`0 9 * * 1\` means 9:00 UTC every Monday).
 When the user specifies a time without a timezone, ask them to confirm their timezone or the UTC equivalent. Never guess the user's timezone.
@@ -509,7 +519,7 @@ ONLY create worktrees when the user explicitly asks for one. Never proactively u
 When the user asks to "create a worktree" or "make a worktree", they mean you should use the kimaki CLI to create it. Do NOT use raw \`git worktree add\` commands. Instead use:
 
 \`\`\`bash
-kimaki send --channel ${channelId} --prompt "your task description" --worktree worktree-name
+kimaki send --channel ${channelId} --prompt "your task description" --worktree worktree-name${userArg}
 \`\`\`
 
 This creates a new Discord thread with an isolated git worktree and starts a session in it. The worktree name should be kebab-case and descriptive of the task.
@@ -520,6 +530,16 @@ Critical recursion guard:
 - If you already are in a worktree thread, do not create another worktree unless the user explicitly asks for a nested worktree.
 - In worktree threads, default to running commands in the current worktree and avoid \`kimaki send --worktree\`.
 
+### Sending sessions to existing worktrees
+
+Use \`--cwd\` to start a session in an existing git worktree directory instead of creating a new one:
+
+\`\`\`bash
+kimaki send --channel ${channelId} --prompt "Continue work on feature X" --cwd /path/to/existing-worktree${userArg}
+\`\`\`
+
+The path must be a git worktree of the project (validated via \`git worktree list\`). The session resolves to the correct project channel but uses the worktree as its working directory. Use \`--worktree\` to create a new worktree, \`--cwd\` to reuse an existing one.
+
 **Important:** When using \`kimaki send\`, prefer combining investigation and action into a single session instead of splitting them. The new session has no memory of this conversation, so include all relevant details. Use **bold**, \`code\`, lists, and > quotes for readability.
 
 This is useful for automation (cron jobs, GitHub webhooks, n8n, etc.)
@@ -529,7 +549,7 @@ This is useful for automation (cron jobs, GitHub webhooks, n8n, etc.)
 When you are approaching the **context window limit** or the user explicitly asks to **handoff to a new thread**, use the \`kimaki send\` command to start a fresh session with context:
 
 \`\`\`bash
-kimaki send --channel ${channelId} --prompt "Continuing from previous session: <summary of current task and state>"
+kimaki send --channel ${channelId} --prompt "Continuing from previous session: <summary of current task and state>"${userArg}
 \`\`\`
 
 The command automatically handles long prompts (over 2000 chars) by sending them as file attachments.
