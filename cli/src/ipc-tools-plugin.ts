@@ -13,7 +13,7 @@ import type { ToolContext } from '@opencode-ai/plugin/tool'
 import dedent from 'string-dedent'
 import { z } from 'zod'
 import { setDataDir } from './config.js'
-import { createLogger, LogPrefix, setLogFilePath } from './logger.js'
+import { createPluginLogger, setPluginLogFilePath } from './plugin-logger.js'
 import { initSentry } from './sentry.js'
 
 // Inlined from '@opencode-ai/plugin/tool' because the subpath value import
@@ -30,12 +30,15 @@ import { initSentry } from './sentry.js'
 function tool<Args extends z.ZodRawShape>(input: {
   description: string
   args: Args
-  execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<string>
+  execute(
+    args: z.infer<z.ZodObject<Args>>,
+    context: ToolContext,
+  ): Promise<string>
 }) {
   return input
 }
 
-const logger = createLogger(LogPrefix.OPENCODE)
+const logger = createPluginLogger('OPENCODE')
 
 const FILE_UPLOAD_TIMEOUT_MS = 6 * 60 * 1000
 const DEFAULT_FILE_UPLOAD_MAX_FILES = 5
@@ -57,11 +60,11 @@ async function loadDatabaseModule() {
 const ipcToolsPlugin: any = async () => {
   initSentry()
 
-  const dataDir = process.env.KIMAKI_DATA_DIR
-  if (dataDir) {
-    setDataDir(dataDir)
-    setLogFilePath(dataDir)
-  }
+    const dataDir = process.env.KIMAKI_DATA_DIR
+    if (dataDir) {
+      setDataDir(dataDir)
+      setPluginLogFilePath(dataDir)
+    }
 
   return {
     tool: {
@@ -73,13 +76,19 @@ const ipcToolsPlugin: any = async () => {
           'Use this when you need the user to provide files (images, documents, configs, etc.). ' +
           'IMPORTANT: Always call this tool last in your message, after all text parts.',
         args: {
-          prompt: z.string().describe('Message shown to the user explaining what files to upload'),
+          prompt: z
+            .string()
+            .describe(
+              'Message shown to the user explaining what files to upload',
+            ),
           maxFiles: z
             .number()
             .min(1)
             .max(10)
             .optional()
-            .describe('Maximum number of files the user can upload (1-10, default 5)'),
+            .describe(
+              'Maximum number of files the user can upload (1-10, default 5)',
+            ),
         },
         async execute({ prompt, maxFiles }, context) {
           const { getPrisma, createIpcRequest, getIpcRequestById } = await loadDatabaseModule()
@@ -169,7 +178,9 @@ const ipcToolsPlugin: any = async () => {
             )
             .min(1)
             .max(3)
-            .describe('Array of 1-3 action buttons. Prefer one button whenever possible.'),
+            .describe(
+              'Array of 1-3 action buttons. Prefer one button whenever possible.',
+            ),
         },
         async execute({ buttons }, context) {
           const { getPrisma, createIpcRequest, getIpcRequestById } = await loadDatabaseModule()

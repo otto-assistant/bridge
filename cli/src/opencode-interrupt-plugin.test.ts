@@ -250,7 +250,9 @@ async function requireHooks({
 }: {
   client: MockClient
 }): Promise<{ eventHook: InterruptEventHook; chatHook: InterruptChatHook }> {
-  const hooks = await interruptOpencodeSessionOnUserMessage(createContext({ client }))
+  const hooks = await interruptOpencodeSessionOnUserMessage(
+    createContext({ client }),
+  )
 
   const eventHook = hooks.event
   if (!eventHook) {

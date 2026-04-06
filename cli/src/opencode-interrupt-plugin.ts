@@ -166,9 +166,9 @@ function createInterruptState() {
     })
   }
 
-  function getNextPendingForSession(
-    sessionID: string,
-  ): { messageID: string; pending: PendingMessage } | undefined {
+  function getNextPendingForSession(sessionID: string):
+    | { messageID: string; pending: PendingMessage }
+    | undefined {
     for (const [messageID, pending] of pendingByMessageId.entries()) {
       if (pending.sessionID !== sessionID) {
         continue
@@ -305,10 +305,10 @@ const interruptOpencodeSessionOnUserMessage: Plugin = async (ctx) => {
       const abortedAssistantWait = state.waitForEvent({
         match: (event) => {
           return (
-            event.type === 'message.updated' &&
-            event.properties.info.role === 'assistant' &&
-            event.properties.info.sessionID === sessionID &&
-            event.properties.info.error?.name === 'MessageAbortedError'
+            event.type === 'message.updated'
+            && event.properties.info.role === 'assistant'
+            && event.properties.info.sessionID === sessionID
+            && event.properties.info.error?.name === 'MessageAbortedError'
           )
         },
         timeoutMs: 5_000,
@@ -320,7 +320,9 @@ const interruptOpencodeSessionOnUserMessage: Plugin = async (ctx) => {
         timeoutMs: 10_000,
       })
 
-      await ctx.client.session.abort({ path: { id: sessionID } })
+      await ctx.client.session.abort({
+        path: { id: sessionID },
+      })
       await abortedAssistantWait
       await idleWait
 
@@ -380,7 +382,9 @@ const interruptOpencodeSessionOnUserMessage: Plugin = async (ctx) => {
       state.dispatchEvent(event)
 
       if (event.type === 'message.part.updated' && event.properties.part.type === 'step-finish') {
-        const nextPending = state.getNextPendingForSession(event.properties.part.sessionID)
+        const nextPending = state.getNextPendingForSession(
+          event.properties.part.sessionID,
+        )
         if (!nextPending) {
           return
         }
@@ -399,15 +403,20 @@ const interruptOpencodeSessionOnUserMessage: Plugin = async (ctx) => {
 
       if (event.type === 'message.updated' && event.properties.info.role === 'assistant') {
         if (!event.properties.info.error) {
-          state.setLatestAssistantMessage(event.properties.info.sessionID, event.properties.info.id)
+          state.setLatestAssistantMessage(
+            event.properties.info.sessionID,
+            event.properties.info.id,
+          )
         }
 
-        const nextPending = state.getNextPendingForSession(event.properties.info.sessionID)
+        const nextPending = state.getNextPendingForSession(
+          event.properties.info.sessionID,
+        )
         if (
-          nextPending &&
-          !nextPending.pending.started &&
-          !event.properties.info.error &&
-          event.properties.info.parentID !== nextPending.messageID
+          nextPending
+          && !nextPending.pending.started
+          && !event.properties.info.error
+          && event.properties.info.parentID !== nextPending.messageID
         ) {
           nextPending.pending.abortAfterStepMessageID = event.properties.info.id
         }
