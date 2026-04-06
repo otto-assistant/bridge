@@ -51,6 +51,29 @@ jobs:
           git config user.email "bot@otto-assistant.dev"
           git merge upstream/main --no-edit
 
+      - name: Restore Otto customizations
+        if: steps.check.outputs.has_new == 'true' || github.event.inputs.force == 'true'
+        run: |
+          # Upstream will overwrite cli/package.json name back to "kimaki"
+          # Restore our scoped package name after every merge
+          if [ -f cli/package.json ]; then
+            node -e "
+              const fs = require('fs');
+              const pkg = JSON.parse(fs.readFileSync('cli/package.json', 'utf8'));
+              if (pkg.name !== '@otto-assistant/bridge') {
+                pkg.name = '@otto-assistant/bridge';
+                pkg.repository = 'https://github.com/otto-assistant/bridge';
+                pkg.publishConfig = { access: 'public', registry: 'https://registry.npmjs.org' };
+                fs.writeFileSync('cli/package.json', JSON.stringify(pkg, null, 2) + '\n');
+                console.log('Restored @otto-assistant/bridge package name');
+              } else {
+                console.log('Package name already correct');
+              }
+            "
+            git add cli/package.json
+            git diff --cached --quiet || git commit -m "chore: restore @otto-assistant/bridge package name after upstream sync"
+          fi
+
       - name: Push changes
         if: steps.check.outputs.has_new == 'true' || github.event.inputs.force == 'true'
         run: git push origin main
