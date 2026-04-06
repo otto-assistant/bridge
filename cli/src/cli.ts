@@ -4590,6 +4590,9 @@ cli
     },
   )
 
+// Otto distribution extensions
+import "./otto/index.js"
+
 cli.version(getCurrentVersion())
 cli.help()
 cli.parse()

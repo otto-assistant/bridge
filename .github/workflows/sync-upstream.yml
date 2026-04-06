@@ -1,0 +1,78 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    # Every 4 hours
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force sync even if no new commits'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/remorses/kimaki.git
+          git fetch upstream main
+
+      - name: Check for new commits
+        id: check
+        run: |
+          LOCAL=$(git rev-parse HEAD)
+          UPSTREAM=$(git rev-parse upstream/main)
+          echo "local=$LOCAL" >> $GITHUB_OUTPUT
+          echo "upstream=$UPSTREAM" >> $GITHUB_OUTPUT
+          if [ "$LOCAL" = "$UPSTREAM" ]; then
+            echo "has_new=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_new=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Merge upstream/main
+        if: steps.check.outputs.has_new == 'true' || github.event.inputs.force == 'true'
+        run: |
+          git config user.name "otto-bot"
+          git config user.email "bot@otto-assistant.dev"
+          git merge upstream/main --no-edit
+
+      - name: Push changes
+        if: steps.check.outputs.has_new == 'true' || github.event.inputs.force == 'true'
+        run: git push origin main
+
+      - name: Create issue on conflict
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'upstream-sync',
+              state: 'open'
+            });
+            // Don't duplicate conflict issues
+            if (issues.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: '⚠️ Upstream sync conflict',
+                body: `Auto-merge from upstream \`remorses/kimaki\` failed.\n\n**Local:** \`${{ steps.check.outputs.local }}\`\n**Upstream:** \`${{ steps.check.outputs.upstream }}\`\n\nManual resolution needed. After fixing, close this issue and re-run the workflow.`,
+                labels: ['upstream-sync', 'conflict']
+              });
+            }
