@@ -221,8 +221,6 @@ test('generate markdown with system info', async () => {
 
     Hello! This is a deterministic markdown test response.
 
-
-    *Completed in Xs*
     "
   `)
 })
@@ -258,8 +256,6 @@ test('generate markdown without system info', async () => {
 
     Hello! This is a deterministic markdown test response.
 
-
-    *Completed in Xs*
     "
   `)
 })
