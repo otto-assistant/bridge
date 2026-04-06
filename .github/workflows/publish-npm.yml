@@ -1,0 +1,105 @@
+name: Publish to npm
+
+on:
+  # Trigger manually or after sync-upstream succeeds
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (leave empty to use current package.json version)'
+        required: false
+        default: ''
+      tag:
+        description: 'npm tag (latest, next, beta)'
+        required: false
+        default: 'latest'
+  workflow_run:
+    workflows: ["Sync Upstream"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  check-and-publish:
+    runs-on: ubuntu-latest
+    # Only run if sync succeeded (or manual trigger)
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build workspace packages with dist/ exports
+        run: |
+          pnpm --filter errore run build
+          pnpm --filter traforo run build
+          pnpm --filter opencode-injection-guard run build
+          pnpm --filter libsqlproxy run build
+
+      - name: Generate Prisma + SQL (cli)
+        run: pnpm generate
+        working-directory: cli
+
+      - name: Build cli
+        run: pnpm build
+        working-directory: cli
+
+      - name: Bump version if specified
+        if: github.event.inputs.version != ''
+        working-directory: cli
+        run: npm version ${{ github.event.inputs.version }} --no-git-tag-version
+
+      - name: Check if version already published
+        id: check-version
+        working-directory: cli
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+          # Check if this version exists on npm
+          EXISTS=$(npm view @otto-assistant/bridge@$CURRENT version 2>/dev/null || echo "")
+          if [ "$EXISTS" = "$CURRENT" ]; then
+            echo "already_published=true" >> $GITHUB_OUTPUT
+            echo "Version $CURRENT already published, skipping."
+          else
+            echo "already_published=false" >> $GITHUB_OUTPUT
+            echo "Version $CURRENT not yet published, proceeding."
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to npm
+        if: steps.check-version.outputs.already_published == 'false'
+        working-directory: cli
+        run: |
+          npm publish --tag ${{ github.event.inputs.tag || 'latest' }} --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Commit version bump if any
+        if: >
+          github.event.inputs.version != '' &&
+          steps.check-version.outputs.already_published == 'false'
+        run: |
+          git config user.name "otto-bot"
+          git config user.email "bot@otto-assistant.dev"
+          git add cli/package.json
+          git commit -m "chore: bump @otto-assistant/bridge to ${{ steps.check-version.outputs.version }}"
+          git push origin main
