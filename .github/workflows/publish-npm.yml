@@ -33,6 +33,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          submodules: recursive
 
       - uses: pnpm/action-setup@v4
         with:
@@ -54,9 +55,10 @@ jobs:
           pnpm --filter opencode-injection-guard run build
           pnpm --filter libsqlproxy run build
 
-      - name: Generate Prisma + SQL (cli)
-        run: pnpm generate
-        working-directory: cli
+      - name: Generate Prisma + SQL
+        run: |
+          pnpm --filter discord-digital-twin generate
+          pnpm --filter cli generate
 
       - name: Build cli
         run: pnpm build
