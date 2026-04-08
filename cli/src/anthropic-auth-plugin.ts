@@ -35,6 +35,10 @@ import {
   upsertAccount,
   withAuthStateLock,
 } from './anthropic-auth-state.js'
+import {
+  extractAnthropicAccountIdentity,
+  type AnthropicAccountIdentity,
+} from './anthropic-account-identity.js'
 // PKCE (Proof Key for Code Exchange) using Web Crypto API.
 // Reference: https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/oauth/pkce.ts
 function base64urlEncode(bytes: Uint8Array): string {
@@ -68,6 +72,8 @@ const CLIENT_ID = (() => {
 
 const TOKEN_URL = 'https://platform.claude.com/v1/oauth/token'
 const CREATE_API_KEY_URL = 'https://api.anthropic.com/api/oauth/claude_cli/create_api_key'
+const CLIENT_DATA_URL = 'https://api.anthropic.com/api/oauth/claude_cli/client_data'
+const PROFILE_URL = 'https://api.anthropic.com/api/oauth/profile'
 const CALLBACK_PORT = 53692
 const CALLBACK_PATH = '/callback'
 const REDIRECT_URI = `http://localhost:${CALLBACK_PORT}${CALLBACK_PATH}`
@@ -81,6 +87,7 @@ const CLAUDE_CODE_BETA = 'claude-code-20250219'
 const OAUTH_BETA = 'oauth-2025-04-20'
 const FINE_GRAINED_TOOL_STREAMING_BETA = 'fine-grained-tool-streaming-2025-05-14'
 const INTERLEAVED_THINKING_BETA = 'interleaved-thinking-2025-05-14'
+const TOAST_SESSION_HEADER = 'x-kimaki-session-id'
 
 const ANTHROPIC_HOSTS = new Set([
   'api.anthropic.com',
@@ -298,6 +305,28 @@ async function createApiKey(accessToken: string): Promise<ApiKeySuccess> {
   return { type: 'success', key: json.raw_key }
 }
 
+async function fetchAnthropicAccountIdentity(accessToken: string) {
+  const urls = [CLIENT_DATA_URL, PROFILE_URL]
+  for (const url of urls) {
+    const responseText = await requestText(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        authorization: `Bearer ${accessToken}`,
+        'user-agent': process.env.OPENCODE_ANTHROPIC_USER_AGENT || `claude-cli/${CLAUDE_CODE_VERSION}`,
+        'x-app': 'cli',
+      },
+    }).catch(() => {
+      return undefined
+    })
+    if (!responseText) continue
+    const parsed = JSON.parse(responseText) as unknown
+    const identity = extractAnthropicAccountIdentity(parsed)
+    if (identity) return identity
+  }
+  return undefined
+}
+
 // --- Localhost callback server ---
 
 type CallbackResult = { code: string; state: string }
@@ -469,12 +498,13 @@ function buildAuthorizeHandler(mode: 'oauth' | 'apikey') {
       if (mode === 'apikey') {
         return createApiKey(creds.access)
       }
+      const identity = await fetchAnthropicAccountIdentity(creds.access)
       await rememberAnthropicOAuth({
         type: 'oauth',
         refresh: creds.refresh,
         access: creds.access,
         expires: creds.expires,
-      })
+      }, identity)
       return creds
     }
 
@@ -489,8 +519,7 @@ function buildAuthorizeHandler(mode: 'oauth' | 'apikey') {
             try {
               const result = await waitForCallback(auth.callbackServer)
               return await finalize(result)
-            } catch (error) {
-              console.error(`[anthropic-auth] ${error}`)
+            } catch {
               return { type: 'failed' }
             }
           })()
@@ -509,8 +538,7 @@ function buildAuthorizeHandler(mode: 'oauth' | 'apikey') {
           try {
             const result = await waitForCallback(auth.callbackServer, input)
             return await finalize(result)
-          } catch (error) {
-            console.error(`[anthropic-auth] ${error}`)
+          } catch {
             return { type: 'failed' }
           }
         })()
@@ -682,6 +710,19 @@ function wrapResponseStream(response: Response, reverseToolNameMap: Map<string, 
   })
 }
 
+function appendToastSessionMarker({
+  message,
+  sessionId,
+}: {
+  message: string
+  sessionId: string | undefined
+}) {
+  if (!sessionId) {
+    return message
+  }
+  return `${message} ${sessionId}`
+}
+
 // --- Beta headers ---
 
 function getRequiredBetas(modelId: string | undefined) {
@@ -737,7 +778,18 @@ async function getFreshOAuth(
     await setAnthropicAuth(refreshed, client)
     const store = await loadAccountStore()
     if (store.accounts.length > 0) {
-      upsertAccount(store, refreshed)
+      const identity: AnthropicAccountIdentity | undefined = (() => {
+        const currentIndex = store.accounts.findIndex((account) => {
+          return account.refresh === latest.refresh || account.access === latest.access
+        })
+        const current = currentIndex >= 0 ? store.accounts[currentIndex] : undefined
+        if (!current) return undefined
+        return {
+          ...(current.email ? { email: current.email } : {}),
+          ...(current.accountId ? { accountId: current.accountId } : {}),
+        }
+      })()
+      upsertAccount(store, { ...refreshed, ...identity })
       await saveAccountStore(store)
     }
     return refreshed
@@ -752,6 +804,12 @@ async function getFreshOAuth(
 
 const AnthropicAuthPlugin: Plugin = async ({ client }) => {
   return {
+    'chat.headers': async (input, output) => {
+      if (input.model.providerID !== 'anthropic') {
+        return
+      }
+      output.headers[TOAST_SESSION_HEADER] = input.sessionID
+    },
     auth: {
       provider: 'anthropic',
       async loader(
@@ -788,21 +846,27 @@ const AnthropicAuthPlugin: Plugin = async ({ client }) => {
                       .catch(() => undefined)
                   : undefined
 
-            const rewritten = rewriteRequestPayload(originalBody, (msg) => {
-              client.tui.showToast({
-                body: { message: msg, variant: 'error' },
-              }).catch(() => {})
-            })
             const headers = new Headers(init?.headers)
             if (input instanceof Request) {
               input.headers.forEach((v, k) => {
                 if (!headers.has(k)) headers.set(k, v)
               })
             }
+            const sessionId = headers.get(TOAST_SESSION_HEADER) ?? undefined
+
+            const rewritten = rewriteRequestPayload(originalBody, (msg) => {
+              client.tui.showToast({
+                body: {
+                  message: appendToastSessionMarker({ message: msg, sessionId }),
+                  variant: 'error',
+                },
+              }).catch(() => {})
+            })
             const betas = getRequiredBetas(rewritten.modelId)
 
             const runRequest = async (auth: OAuthStored) => {
               const requestHeaders = new Headers(headers)
+              requestHeaders.delete(TOAST_SESSION_HEADER)
               requestHeaders.set('accept', 'application/json')
               requestHeaders.set(
                 'anthropic-beta',
@@ -839,9 +903,13 @@ const AnthropicAuthPlugin: Plugin = async ({ client }) => {
                   // Show toast notification so Discord thread shows the rotation
                   client.tui.showToast({
                     body: {
-                      message: `Switching from account ${rotated.fromLabel} to account ${rotated.toLabel}`,
+                      message: appendToastSessionMarker({
+                        message: `Switching from account ${rotated.fromLabel} to account ${rotated.toLabel}`,
+                        sessionId,
+                      }),
                       variant: 'info',
                     },
+
                   }).catch(() => {})
                   const retryAuth = await getFreshOAuth(getAuth, client)
                   if (retryAuth) {

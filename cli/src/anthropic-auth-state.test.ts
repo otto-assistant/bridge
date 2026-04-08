@@ -1,10 +1,11 @@
-// Tests for Anthropic OAuth multi-account persistence and rotation.
+// Tests Anthropic OAuth account persistence, deduplication, and rotation.
 
 import { mkdtemp, readFile, rm, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import {
+  accountLabel,
   authFilePath,
   loadAccountStore,
   rememberAnthropicOAuth,
@@ -59,6 +60,27 @@ describe('rememberAnthropicOAuth', () => {
       access: 'access-first-new',
       expires: 3,
     })
+  })
+
+  test('deduplicates new tokens by email or account ID', async () => {
+    await rememberAnthropicOAuth(firstAccount, {
+      email: 'user@example.com',
+      accountId: 'usr_123',
+    })
+    await rememberAnthropicOAuth(secondAccount, {
+      email: 'User@example.com',
+      accountId: 'usr_123',
+    })
+
+    const store = await loadAccountStore()
+    expect(store.accounts).toHaveLength(1)
+    expect(store.accounts[0]).toMatchObject({
+      refresh: 'refresh-second',
+      access: 'access-second',
+      email: 'user@example.com',
+      accountId: 'usr_123',
+    })
+    expect(accountLabel(store.accounts[0]!)).toBe('user@example.com')
   })
 })
 
