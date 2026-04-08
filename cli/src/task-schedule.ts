@@ -8,6 +8,7 @@ export type ScheduledTaskPayload =
       kind: 'thread'
       threadId: string
       prompt: string
+      silentPrompt: boolean
       agent: string | null
       model: string | null
       username: string | null
@@ -21,6 +22,7 @@ export type ScheduledTaskPayload =
       prompt: string
       name: string | null
       notifyOnly: boolean
+      silentPrompt: boolean
       worktreeName: string | null
       cwd: string | null
       agent: string | null
@@ -251,6 +253,7 @@ export function parseScheduledTaskPayload(
   if (kind === 'thread') {
     const threadId = asString(parsed.threadId)
     const prompt = asString(parsed.prompt)
+    const silentPrompt = parsed.silentPrompt === true
     const agent = asString(parsed.agent)
     const model = asString(parsed.model)
     const username = asString(parsed.username)
@@ -264,6 +267,7 @@ export function parseScheduledTaskPayload(
       kind: 'thread',
       threadId,
       prompt,
+      silentPrompt,
       agent,
       model,
       username,
@@ -279,6 +283,7 @@ export function parseScheduledTaskPayload(
     const nameValue = parsed.name
     const name = typeof nameValue === 'string' ? nameValue : null
     const notifyOnly = parsed.notifyOnly === true
+    const silentPrompt = parsed.silentPrompt === true
     const worktreeName = asString(parsed.worktreeName)
     const cwd = asString(parsed.cwd)
     const agent = asString(parsed.agent)
@@ -296,6 +301,7 @@ export function parseScheduledTaskPayload(
       prompt,
       name,
       notifyOnly,
+      silentPrompt,
       worktreeName,
       cwd,
       agent,

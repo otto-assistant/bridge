@@ -231,22 +231,26 @@ async function sendDiscordMessageWithOptionalAttachment({
   botToken,
   embeds,
   rest,
+  silentPrompt,
 }: {
   channelId: string
   prompt: string
   botToken: string
   embeds?: Array<{ color: number; footer: { text: string } }>
   rest: REST
+  /** When true, prompt is always sent as a hidden attachment with a short display message */
+  silentPrompt?: boolean
 }): Promise<{ id: string }> {
   const discordMaxLength = 2000
-  if (prompt.length <= discordMaxLength) {
+  if (!silentPrompt && prompt.length <= discordMaxLength) {
     return (await rest.post(Routes.channelMessages(channelId), {
       body: { content: prompt, embeds },
     })) as { id: string }
   }
 
-  const preview = prompt.slice(0, 100).replace(/\n/g, ' ')
-  const summaryContent = `Prompt attached as file (${prompt.length} chars)\n\n> ${preview}...`
+  const summaryContent = silentPrompt
+    ? '» **Scheduled task**'
+    : `Prompt attached as file (${prompt.length} chars)\n\n> ${prompt.slice(0, 100).replace(/\n/g, ' ')}...`
 
   const tmpDir = path.join(process.cwd(), 'tmp')
   if (!fs.existsSync(tmpDir)) {
@@ -2343,6 +2347,10 @@ cli
     'Create notification thread without starting AI session',
   )
   .option(
+    '--silent-prompt',
+    'Hide prompt text from Discord thread (send as hidden attachment)',
+  )
+  .option(
     '--worktree [name]',
     'Create git worktree for session (name optional, derives from thread name)',
   )
@@ -2388,6 +2396,7 @@ cli
       name?: string
       appId?: string
       notifyOnly?: boolean
+      silentPrompt?: boolean
       worktree?: string | boolean
       cwd?: string
       user?: string
@@ -2407,6 +2416,7 @@ cli
           name,
           appId: optionAppId,
           notifyOnly,
+          silentPrompt,
           thread: threadId,
           session: sessionId,
         } = options
@@ -2442,9 +2452,9 @@ cli
             cliLogger.error('Cannot use --wait with --send-at')
             process.exit(EXIT_NO_RESTART)
           }
-          if (prompt.length > 1900) {
+          if (!silentPrompt && prompt.length > 1900) {
             cliLogger.error(
-              '--send-at currently supports prompts up to 1900 characters',
+              '--send-at currently supports prompts up to 1900 characters (use --silent-prompt for longer prompts)',
             )
             process.exit(EXIT_NO_RESTART)
           }
@@ -2487,6 +2497,11 @@ cli
 
         if (options.wait && notifyOnly) {
           cliLogger.error('Cannot use --wait with --notify-only')
+          process.exit(EXIT_NO_RESTART)
+        }
+
+        if (silentPrompt && notifyOnly) {
+          cliLogger.error('Cannot use --silent-prompt with --notify-only')
           process.exit(EXIT_NO_RESTART)
         }
 
@@ -2702,6 +2717,7 @@ cli
               kind: 'thread',
               threadId: targetThreadId,
               prompt,
+              silentPrompt: Boolean(silentPrompt),
               agent: options.agent || null,
               model: options.model || null,
               username: null,
@@ -2755,6 +2771,7 @@ cli
             botToken,
             embeds: promptEmbed,
             rest,
+            silentPrompt,
           })
 
           const threadUrl = `https://discord.com/channels/${threadData.guild_id}/${threadData.id}`
@@ -2878,6 +2895,7 @@ cli
             prompt,
             name: name || null,
             notifyOnly: Boolean(notifyOnly),
+            silentPrompt: Boolean(silentPrompt),
             worktreeName: worktreeName || null,
             cwd: resolvedCwd || null,
             agent: options.agent || null,
@@ -2935,6 +2953,7 @@ cli
           botToken,
           embeds: autoStartEmbed,
           rest,
+          silentPrompt,
         })
 
         cliLogger.log('Creating thread...')

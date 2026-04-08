@@ -25,6 +25,40 @@ import {
 
 const taskLogger = createLogger(LogPrefix.TASK)
 
+/**
+ * Post a Discord message with the prompt as a hidden text-file attachment.
+ * Used when `silentPrompt` is true so the full prompt is not visible in the
+ * thread message body — only a short label is shown. The bot's
+ * `getTextAttachments` helper extracts the prompt from the attachment.
+ */
+async function postMessageWithPromptAttachment({
+  rest,
+  channelId,
+  displayContent,
+  prompt,
+  embeds,
+}: {
+  rest: REST
+  channelId: string
+  displayContent: string
+  prompt: string
+  embeds?: Array<{ color: number; footer: { text: string } }>
+}): Promise<unknown> {
+  return rest.post(Routes.channelMessages(channelId), {
+    body: {
+      content: displayContent,
+      attachments: [{ id: 0, filename: 'prompt.md' }],
+      ...(embeds ? { embeds } : {}),
+    },
+    files: [
+      {
+        name: 'prompt.md',
+        data: Buffer.from(prompt, 'utf-8'),
+      },
+    ],
+  })
+}
+
 type StartTaskRunnerOptions = {
   token: string
   pollIntervalMs?: number
@@ -73,18 +107,25 @@ async function executeThreadScheduledTask({
   // find the command on its own line.
   const prefixedPrompt = `» **kimaki-cli:**\n${payload.prompt}`
 
-  const postResult = await rest
-    .post(Routes.channelMessages(payload.threadId), {
-      body: {
-        content: prefixedPrompt,
+  const postResult = await (payload.silentPrompt
+    ? postMessageWithPromptAttachment({
+        rest,
+        channelId: payload.threadId,
+        displayContent: '» **Scheduled task**',
+        prompt: prefixedPrompt,
         embeds: embed,
-      },
-    })
-    .catch((error) => {
-      return new Error(`Failed to post scheduled thread task ${task.id}`, {
-        cause: error,
       })
+    : rest.post(Routes.channelMessages(payload.threadId), {
+        body: {
+          content: prefixedPrompt,
+          embeds: embed,
+        },
+      })
+  ).catch((error) => {
+    return new Error(`Failed to post scheduled thread task ${task.id}`, {
+      cause: error,
     })
+  })
 
   if (postResult instanceof Error) {
     return postResult
@@ -121,18 +162,25 @@ async function executeChannelScheduledTask({
     ? [{ color: 0x2b2d31, footer: { text: YAML.stringify(marker) } }]
     : undefined
 
-  const starterResult = await rest
-    .post(Routes.channelMessages(payload.channelId), {
-      body: {
-        content: payload.prompt,
+  const starterResult = await (payload.silentPrompt
+    ? postMessageWithPromptAttachment({
+        rest,
+        channelId: payload.channelId,
+        displayContent: '» **Scheduled task**',
+        prompt: payload.prompt,
         embeds,
-      },
-    })
-    .catch((error) => {
-      return new Error(`Failed to create starter message for task ${task.id}`, {
-        cause: error,
       })
+    : rest.post(Routes.channelMessages(payload.channelId), {
+        body: {
+          content: payload.prompt,
+          embeds,
+        },
+      })
+  ).catch((error) => {
+    return new Error(`Failed to create starter message for task ${task.id}`, {
+      cause: error,
     })
+  })
 
   if (starterResult instanceof Error) {
     return starterResult
