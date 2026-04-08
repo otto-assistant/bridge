@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.96
+
+1. **System prompt drift toasts now route to the correct Discord thread** — toasts from the `systemPromptDriftPlugin` are now scoped to the active session's thread. A hidden session marker is appended in the plugin and stripped before rendering, so drift notices appear only in the thread that triggered the event instead of broadcasting globally.
+
+2. **Simpler debug filenames for system prompt drift** — saved system prompt and diff files now share a timestamped basename (e.g. `2026-04-08T10-01.md` / `2026-04-08T10-01.diff`) instead of using the session ID, keeping the debug paths shorter and each event self-contained.
+
+3. **Cleaner drift toast copy** — diff and latest-prompt paths are now shown as inline code; wording is lower-cased and the extra explanatory sentence is removed to keep the notice concise.
+
+## 0.4.95
+
+1. **Fixed Claude Max subscription prompt stripping** — instead of replacing the entire system prompt or splicing out the whole OpenCode identity block, kimaki now removes only the section from `"You are OpenCode…"` up to `"# Code References"`, preserving the rest of the prompt that Anthropic's API expects. This restores correct behaviour for Claude Pro/Max OAuth users. Shows a toast error if the expected marker is not found.
+
+2. **Fixed discord.js CJS interop in plugin chain** — the plugin loader now uses a namespace import for discord.js to avoid CJS/ESM interop crashes when running inside the OpenCode plugin host process.
+
+## 0.4.94
+
+1. **Fixed Claude Max subscription support** — the error message "Third-party apps now draw from your extra usage, not your plan limits" no longer breaks authentication. Kimaki now correctly detects active Max subscriptions and continues using them without requiring a re-login.
+
+2. **New `systemPromptDriftPlugin`** — detects when the effective system prompt changes between turns inside an OpenCode session. When drift is detected, it writes a unified diff to the Kimaki data directory and shows a Discord toast with addition/deletion counts, making it easy to spot which plugin is busting the prompt cache and driving up rate-limit usage.
+
+3. **Log output is now capped at 1 000 characters per argument** — prevents runaway log files when tools return very large outputs. Truncated portions show a `… [truncated N chars]` suffix so nothing is silently dropped.
+
+4. **Softer wording on worktree directory reminders** — the mid-session reminder injected when switching to a worktree now says "You should read, write, and edit files under …" instead of "You MUST …", reducing unnecessary alarm in the agent's context.
+
 ## 0.4.93
 
 1. **Claude account rotation is now visible in Discord** — when Anthropic OAuth hits a rate limit or auth failure and kimaki rotates to another saved Claude account, the thread now shows a toast-style notice with the account labels so you can see which account it switched from and to.
