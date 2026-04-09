@@ -33,6 +33,7 @@ type SessionState = {
   comparedTurn: number
   previousTurnContext: TurnContext | undefined
   currentTurnContext: TurnContext | undefined
+  pendingCompareTimeout: ReturnType<typeof setTimeout> | undefined
 }
 
 type SystemPromptDiff = {
@@ -146,7 +147,6 @@ function writeSystemPromptDiffFile({
   additions: number
   deletions: number
   filePath: string
-  latestPromptPath: string
 } {
   const diff = buildPatch({
     beforeText: beforePrompt,
@@ -157,7 +157,7 @@ function writeSystemPromptDiffFile({
   const timestamp = new Date().toISOString().replaceAll(':', '-')
   const sessionDir = path.join(getSystemPromptDiffDir({ dataDir }), sessionId)
   const filePath = path.join(sessionDir, `${timestamp}.diff`)
-  const latestPromptPath = path.join(sessionDir, `${timestamp}.md`)
+
   const fileContent = [
     `Session: ${sessionId}`,
     `Created: ${new Date().toISOString()}`,
@@ -176,7 +176,6 @@ function writeSystemPromptDiffFile({
           additions: diff.additions,
           deletions: diff.deletions,
           filePath,
-          latestPromptPath,
         }
     },
     catch: (error) => {
@@ -204,6 +203,7 @@ function getOrCreateSessionState({
     comparedTurn: 0,
     previousTurnContext: undefined,
     currentTurnContext: undefined,
+    pendingCompareTimeout: undefined,
   }
   sessions.set(sessionId, state)
   return state
@@ -278,8 +278,7 @@ async function handleSystemTransform({
         sessionId,
         message:
         `system prompt changed since the previous message (+${diffFileResult.additions} / -${diffFileResult.deletions}). ` +
-        `Diff: \`${abbreviatePath(diffFileResult.filePath)}\`. ` +
-        `Latest prompt: \`${abbreviatePath(diffFileResult.latestPromptPath)}\``,
+        `Diff: \`${abbreviatePath(diffFileResult.filePath)}\`. `
       }),
     },
   })
@@ -315,13 +314,46 @@ const systemPromptDriftPlugin: Plugin = async ({ client, directory }) => {
     'experimental.chat.system.transform': async (input, output) => {
       const result = await errore.tryAsync({
         try: async () => {
-          await handleSystemTransform({
-            input,
-            output,
-            sessions,
-            dataDir,
-            client,
-          })
+          const sessionId = input.sessionID
+          if (!sessionId) {
+            return
+          }
+          const state = getOrCreateSessionState({ sessions, sessionId })
+          if (state.pendingCompareTimeout) {
+            clearTimeout(state.pendingCompareTimeout)
+          }
+          // Delay one tick so other system-transform hooks can finish mutating
+          // output.system before we snapshot it for drift detection.
+          state.pendingCompareTimeout = setTimeout(() => {
+            state.pendingCompareTimeout = undefined
+            void errore.tryAsync({
+              try: async () => {
+                await handleSystemTransform({
+                  input,
+                  output,
+                  sessions,
+                  dataDir,
+                  client,
+                })
+              },
+              catch: (error) => {
+                return new Error('system prompt drift transform hook failed', {
+                  cause: error,
+                })
+              },
+            }).then((delayedResult) => {
+              if (!(delayedResult instanceof Error)) {
+                return
+              }
+              logger.warn(
+                `[system-prompt-drift-plugin] ${formatPluginErrorWithStack(delayedResult)}`,
+              )
+              void notifyError(
+                delayedResult,
+                'system prompt drift plugin transform hook failed',
+              )
+            })
+          }, 0)
         },
         catch: (error) => {
           return new Error('system prompt drift transform hook failed', {
@@ -345,6 +377,10 @@ const systemPromptDriftPlugin: Plugin = async ({ client, directory }) => {
           const deletedSessionId = getDeletedSessionId({ event })
           if (!deletedSessionId) {
             return
+          }
+          const state = sessions.get(deletedSessionId)
+          if (state?.pendingCompareTimeout) {
+            clearTimeout(state.pendingCompareTimeout)
           }
           sessions.delete(deletedSessionId)
         },
