@@ -2351,6 +2351,10 @@ cli
     'Hide prompt text from Discord thread (send as hidden attachment)',
   )
   .option(
+    '--no-message',
+    'Create thread without visible prompt message (agent responds first)',
+  )
+  .option(
     '--worktree [name]',
     'Create git worktree for session (name optional, derives from thread name)',
   )
@@ -2397,6 +2401,7 @@ cli
       appId?: string
       notifyOnly?: boolean
       silentPrompt?: boolean
+      noMessage?: boolean
       worktree?: string | boolean
       cwd?: string
       user?: string
@@ -2417,6 +2422,7 @@ cli
           appId: optionAppId,
           notifyOnly,
           silentPrompt,
+          noMessage,
           thread: threadId,
           session: sessionId,
         } = options
@@ -2505,6 +2511,25 @@ cli
           process.exit(EXIT_NO_RESTART)
         }
 
+        if (noMessage && notifyOnly) {
+          cliLogger.error('Cannot use --no-message with --notify-only')
+          process.exit(EXIT_NO_RESTART)
+        }
+
+        if (noMessage && options.wait) {
+          cliLogger.error(
+            'Cannot use --no-message with --wait (CLI does not stream responses)',
+          )
+          process.exit(EXIT_NO_RESTART)
+        }
+
+        if (noMessage && silentPrompt) {
+          cliLogger.error(
+            'Cannot use --no-message with --silent-prompt (--no-message already hides everything)',
+          )
+          process.exit(EXIT_NO_RESTART)
+        }
+
         if (existingThreadMode) {
           const incompatibleFlags: string[] = []
           if (notifyOnly) {
@@ -2521,6 +2546,9 @@ cli
           }
           if (options.user) {
             incompatibleFlags.push('--user')
+          }
+          if (noMessage) {
+            incompatibleFlags.push('--no-message')
           }
           if (!sendAt && options.agent) {
             incompatibleFlags.push('--agent')
