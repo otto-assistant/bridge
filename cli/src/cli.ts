@@ -38,6 +38,8 @@ import {
   createDefaultKimakiChannel,
   type ChannelWithTags,
 } from './discord-bot.js'
+
+import { buildSessionPermissions } from './opencode.js'
 import {
   getBotTokenWithMode,
   ensureServiceAuthToken,
@@ -56,6 +58,9 @@ import {
   updateScheduledTask,
   getSessionStartSourcesBySessionIds,
   deleteChannelDirectoryById,
+  // used by --no-message flow
+  setThreadSession,
+  createIpcRequest,
 } from './database.js'
 import { ShareMarkdown } from './markdown.js'
 import {
@@ -2975,59 +2980,97 @@ cli
           ? [{ color: 0x2b2d31, footer: { text: YAML.stringify(embedMarker) } }]
           : undefined
 
-        const starterMessage = await sendDiscordMessageWithOptionalAttachment({
-          channelId,
-          prompt,
-          botToken,
-          embeds: autoStartEmbed,
-          rest,
-          silentPrompt,
-        })
+        if (noMessage) {
+          // Special flow: create an invisible starter message + thread, then
+          // create an OpenCode session and submit the prompt via SDK so the
+          // agent responds first inside the thread. Finally persist mapping
+          // and notify the running bot via IPC.
+          let starterMessage: { id: string } | undefined
+          let threadData: { id: string; name?: string } | undefined
+          try {
+            cliLogger.log('Creating invisible starter message...')
+            starterMessage = (await rest.post(Routes.channelMessages(channelId), {
+              body: { content: '\u200B', flags: 4096 },
+            })) as { id: string }
 
-        cliLogger.log('Creating thread...')
+            cliLogger.log('Creating thread...')
+            threadData = (await rest.post(
+              Routes.threads(channelId, starterMessage.id),
+              {
+                body: {
+                  name: threadName.slice(0, 100),
+                  auto_archive_duration: 1440,
+                },
+              },
+            )) as { id: string; name: string }
 
-        const threadData = (await rest.post(
-          Routes.threads(channelId, starterMessage.id),
-          {
-            body: {
-              name: threadName.slice(0, 100),
-              auto_archive_duration: 1440, // 1 day
-            },
-          },
-        )) as { id: string; name: string }
+            cliLogger.log('Thread created!')
 
-        cliLogger.log('Thread created!')
+            // Add user to thread if specified
+            if (resolvedUser) {
+              cliLogger.log(`Adding user ${resolvedUser.username} to thread...`)
+              await rest.put(Routes.threadMembers(threadData.id, resolvedUser.id))
+            }
 
-        // Add user to thread if specified
-        if (resolvedUser) {
-          cliLogger.log(`Adding user ${resolvedUser.username} to thread...`)
-          await rest.put(Routes.threadMembers(threadData.id, resolvedUser.id))
+            // Initialize OpenCode client for the project directory
+            cliLogger.log('Initializing OpenCode for directory...')
+            const getClient = await initializeOpencodeForDirectory(projectDirectory)
+            if (getClient instanceof Error) {
+              throw getClient
+            }
+
+            // Create a new session and enqueue the prompt via promptAsync
+            cliLogger.log('Creating OpenCode session...')
+            const created = await getClient().session.create({
+              directory: projectDirectory,
+              permission: buildSessionPermissions({ directory: projectDirectory }),
+            })
+            const sessionId = created.data?.id
+            if (!sessionId) {
+              throw new Error('Failed to create OpenCode session')
+            }
+
+            cliLogger.log('Submitting prompt via opencode.session.promptAsync...')
+            await getClient().session.promptAsync({
+              sessionID: sessionId,
+              directory: projectDirectory,
+              parts: [{ type: 'text' as const, text: prompt }],
+              ...(options.agent ? { agent: options.agent } : {}),
+            })
+
+            // Persist mapping thread -> session and create IPC request for bot
+            await setThreadSession(threadData.id, sessionId)
+            await createIpcRequest({
+              type: 'start_thread_listener',
+              sessionId,
+              threadId: threadData.id,
+              payload: JSON.stringify({ channelId, appId, projectDirectory }),
+            })
+
+            // Remove the invisible starter message to keep thread clean
+            try {
+              await rest.delete(Routes.channelMessage(channelId, starterMessage.id))
+            } catch (err) {
+              cliLogger.debug('Failed to delete starter message:', err instanceof Error ? err.stack : String(err))
+            }
+
+            const threadUrl = `https://discord.com/channels/${channelData.guild_id}/${threadData.id}`
+            note(`Thread: ${threadData.name || threadData.id}\nDirectory: ${projectDirectory}\n\nSession started and prompt submitted.\n\nURL: ${threadUrl}`, '✅ Thread Created')
+            cliLogger.log(threadUrl)
+
+            process.exit(0)
+          } catch (err) {
+            // Best-effort cleanup: delete starter message if created
+            try {
+              if (starterMessage && starterMessage.id) {
+                await rest.delete(Routes.channelMessage(channelId, starterMessage.id))
+              }
+            } catch (_) {
+              // ignore
+            }
+            throw err
+          }
         }
-
-        const threadUrl = `https://discord.com/channels/${channelData.guild_id}/${threadData.id}`
-
-        const worktreeNote = worktreeName
-          ? `\nWorktree: ${worktreeName} (will be created by bot)`
-          : resolvedCwd
-            ? `\nWorking directory: ${resolvedCwd}`
-            : ''
-        const successMessage = notifyOnly
-          ? `Thread: ${threadData.name}\nDirectory: ${projectDirectory}\n\nNotification created. Reply to start a session.\n\nURL: ${threadUrl}`
-          : `Thread: ${threadData.name}\nDirectory: ${projectDirectory}${worktreeNote}\n\nThe running bot will pick this up and start the session.\n\nURL: ${threadUrl}`
-
-        note(successMessage, '✅ Thread Created')
-
-        cliLogger.log(threadUrl)
-
-        if (options.wait) {
-          const { waitAndOutputSession } = await import('./wait-session.js')
-          await waitAndOutputSession({
-            threadId: threadData.id,
-            projectDirectory,
-          })
-        }
-
-        process.exit(0)
       } catch (error) {
         cliLogger.error(
           'Error:',
