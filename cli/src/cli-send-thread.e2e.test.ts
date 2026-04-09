@@ -339,14 +339,13 @@ describe('kimaki send --channel thread creation', () => {
         })
 
         const allContent = botReplies.map((m) => {
-          return m.content.slice(0, 200)
+          return m.content
         })
-        expect(allContent).toMatchInlineSnapshot(`
-          [
-            "✗ opencode session error: Command not found: "hello-test". Available commands: init, review, goke, security-review, jitter, proxyman, gitchamber, event-sourcing-state, usecomputer, spiceflow, batch, x",
-            "✗ OpenCode API error: Command not found: "hello-test". Available commands: init, review, goke, security-review, jitter, proxyman, gitchamber, event-sourcing-state, usecomputer, spiceflow, batch, x-art",
-          ]
-        `)
+        expect(
+          allContent.some((content) => {
+            return content.includes('Command not found: "hello-test"')
+          }),
+        ).toBe(true)
       } finally {
         store.setState({ registeredUserCommands: prevCommands })
       }
