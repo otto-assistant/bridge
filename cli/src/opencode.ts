@@ -489,6 +489,9 @@ async function startSingleServer(): Promise<ServerStartError | SingleServer> {
   const opencodeConfigDir = path
     .join(os.homedir(), '.config', 'opencode')
     .replaceAll('\\', '/')
+  const opensrcDir = path
+    .join(os.homedir(), '.opensrc')
+    .replaceAll('\\', '/')
   const kimakiDataDir = path
     .join(os.homedir(), '.kimaki')
     .replaceAll('\\', '/')
@@ -503,6 +506,8 @@ async function startSingleServer(): Promise<ServerStartError | SingleServer> {
     [`${tmpdir}/*`]: 'allow',
     [opencodeConfigDir]: 'allow',
     [`${opencodeConfigDir}/*`]: 'allow',
+    [opensrcDir]: 'allow',
+    [`${opensrcDir}/*`]: 'allow',
     [kimakiDataDir]: 'allow',
     [`${kimakiDataDir}/*`]: 'allow',
   }
@@ -543,11 +548,17 @@ async function startSingleServer(): Promise<ServerStartError | SingleServer> {
   // priority chain, so project-level opencode.json can override kimaki defaults.
   // OPENCODE_CONFIG_CONTENT was loaded last and overrode user project configs,
   // causing issue #90 (project permissions not being respected).
+  const isDev = import.meta.url.endsWith('.ts') || import.meta.url.endsWith('.tsx')
   const opencodeConfig = {
     $schema: 'https://opencode.ai/config.json',
     lsp: false,
     formatter: false,
-    plugin: [new URL('../src/kimaki-opencode-plugin.ts', import.meta.url).href],
+    plugin: [
+      new URL(
+        isDev ? './kimaki-opencode-plugin.ts' : './kimaki-opencode-plugin.js',
+        import.meta.url,
+      ).href,
+    ],
     permission: {
       edit: 'allow',
       bash: 'allow',
@@ -876,6 +887,16 @@ export function buildSessionPermissions({
   rules.push(
     { permission: 'external_directory', pattern: opencodeConfigDir, action: 'allow' },
     { permission: 'external_directory', pattern: `${opencodeConfigDir}/*`, action: 'allow' },
+  )
+
+  // Allow ~/.opensrc so agents can inspect cached opensrc checkouts without
+  // permission prompts.
+  const opensrcDir = path
+    .join(os.homedir(), '.opensrc')
+    .replaceAll('\\', '/')
+  rules.push(
+    { permission: 'external_directory', pattern: opensrcDir, action: 'allow' },
+    { permission: 'external_directory', pattern: `${opensrcDir}/*`, action: 'allow' },
   )
 
   // Allow ~/.kimaki so the agent can access kimaki data dir (logs, db, etc.)
