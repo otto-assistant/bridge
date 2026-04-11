@@ -90,6 +90,7 @@ import { createDiscordRest, discordApiUrl, getDiscordRestApiUrl, getGatewayProxy
 import crypto from 'node:crypto'
 import path from 'node:path'
 import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import * as errore from 'errore'
 
 import { createLogger, formatErrorWithStack, initLogFile, LogPrefix } from './logger.js'
@@ -1842,6 +1843,24 @@ cli
     '--gateway-callback-url <url>',
     'After gateway OAuth install, redirect to this URL instead of the default success page (appends ?guild_id=<id>)',
   )
+  .option(
+    '--enable-skill <name>',
+    z
+      .array(z.string())
+      .optional()
+      .describe(
+        'Whitelist a built-in skill by name. Only the listed skills are injected into the model (all others are hidden via an opencode permission.skill deny-all rule). Repeatable: pass --enable-skill multiple times. Mutually exclusive with --disable-skill. See https://github.com/remorses/kimaki/tree/main/cli/skills for available skills.',
+      ),
+  )
+  .option(
+    '--disable-skill <name>',
+    z
+      .array(z.string())
+      .optional()
+      .describe(
+        'Blacklist a built-in skill by name. Listed skills are hidden from the model. Repeatable: pass --disable-skill multiple times. Mutually exclusive with --enable-skill. See https://github.com/remorses/kimaki/tree/main/cli/skills for available skills.',
+      ),
+  )
   .action(
     async (options: {
       restartOnboarding?: boolean
@@ -1858,6 +1877,8 @@ cli
       noSentry?: boolean
       gateway?: boolean
       gatewayCallbackUrl?: string
+      enableSkill?: string[]
+      disableSkill?: string[]
     }) => {
       // Guard: only one kimaki bot process can run at a time (they share a lock
       // port). Running `kimaki` here would kill the already-running bot process
@@ -1901,6 +1922,47 @@ cli
           }
         }
 
+        // --enable-skill and --disable-skill are mutually exclusive: the user
+        // either whitelists a small allowlist or blacklists a few unwanted
+        // skills, never both. Applied later in opencode.ts as permission.skill
+        // rules via computeSkillPermission().
+        const enabledSkills = options.enableSkill ?? []
+        const disabledSkills = options.disableSkill ?? []
+        if (enabledSkills.length > 0 && disabledSkills.length > 0) {
+          cliLogger.error(
+            'Cannot use --enable-skill and --disable-skill at the same time. Use one or the other.',
+          )
+          process.exit(EXIT_NO_RESTART)
+        }
+        // Soft-validate skill names against the bundled skills/ folder. Users
+        // may rely on skills loaded from their own .opencode / .claude / .agents
+        // dirs, so unknown names only emit a warning rather than hard-failing.
+        if (enabledSkills.length > 0 || disabledSkills.length > 0) {
+          const bundledSkillsDir = path.resolve(
+            path.dirname(fileURLToPath(import.meta.url)),
+            '..',
+            'skills',
+          )
+          const availableBundledSkills = (() => {
+            try {
+              return fs
+                .readdirSync(bundledSkillsDir, { withFileTypes: true })
+                .filter((entry) => entry.isDirectory())
+                .map((entry) => entry.name)
+            } catch {
+              return [] as string[]
+            }
+          })()
+          const availableSet = new Set(availableBundledSkills)
+          for (const name of [...enabledSkills, ...disabledSkills]) {
+            if (!availableSet.has(name)) {
+              cliLogger.warn(
+                `Skill "${name}" is not a bundled kimaki skill. Rule will still apply (user-provided skills from .opencode/.claude/.agents dirs may match). Available bundled skills: ${availableBundledSkills.join(', ')}`,
+              )
+            }
+          }
+        }
+
         store.setState({
           ...(options.verbosity && {
             defaultVerbosity: options.verbosity as
@@ -1910,7 +1972,20 @@ cli
           }),
           ...(options.mentionMode && { defaultMentionMode: true }),
           ...(options.noCritique && { critiqueEnabled: false }),
+          ...(enabledSkills.length > 0 && { enabledSkills }),
+          ...(disabledSkills.length > 0 && { disabledSkills }),
         })
+
+        if (enabledSkills.length > 0) {
+          cliLogger.log(
+            `Skill whitelist enabled: only [${enabledSkills.join(', ')}] will be injected`,
+          )
+        }
+        if (disabledSkills.length > 0) {
+          cliLogger.log(
+            `Skill blacklist enabled: [${disabledSkills.join(', ')}] will be hidden`,
+          )
+        }
 
         if (options.verbosity) {
           cliLogger.log(`Default verbosity: ${options.verbosity}`)
@@ -2384,32 +2459,12 @@ cli
     '--wait',
     'Wait for session to complete, then print session text to stdout',
   )
-  .action(
-    async (options: {
-      channel?: string
-      project?: string
-      prompt?: string
-      name?: string | boolean
-      appId?: string | boolean
-      notifyOnly?: boolean
-      worktree?: string | boolean
-      cwd?: string
-      user?: string
-      agent?: string
-      model?: string
-      permission?: string[]
-      injectionGuard?: string[]
-      sendAt?: string
-      thread?: string
-      session?: string
-      wait?: boolean
-    }) => {
+  .action(async (options) => {
       try {
-        // Optional-value flags ([value]) surface as string | boolean in goke; narrow to string | undefined
-        const nameOpt =
-          typeof options.name === 'string' ? options.name : undefined
-        const optionAppId =
-          typeof options.appId === 'string' ? options.appId : undefined
+        // `--name` / `--app-id` are optional-value flags: `undefined` when
+        // omitted, `''` when passed bare, a real string when given a value.
+        // `||` collapses `''` to `undefined` for downstream consumers.
+        const optionAppId = options.appId || undefined
         let {
           channel: channelId,
           prompt,
@@ -2417,7 +2472,7 @@ cli
           thread: threadId,
           session: sessionId,
         } = options
-        let name: string | undefined = nameOpt
+        let name: string | undefined = options.name || undefined
         const { project: projectPath } = options
         const sendAt = options.sendAt
 
@@ -3735,16 +3790,15 @@ cli
   )
   .option('-g, --guild <guildId>', 'Discord guild/server ID (required)')
   .option('-q, --query [query]', 'Search query to filter users by name')
-  .action(async (options: { guild?: string; query?: string | boolean }) => {
+  .action(async (options) => {
     try {
       if (!options.guild) {
         cliLogger.error('Guild ID is required. Use --guild <guildId>')
         process.exit(EXIT_NO_RESTART)
       }
       const guildId = String(options.guild)
-      // Optional-value flag: narrow string | boolean to string | undefined
-      const query =
-        typeof options.query === 'string' ? options.query : undefined
+      // Bare `--query` comes through as `''`; collapse it to undefined
+      const query = options.query || undefined
 
       await initDatabase()
       const { token: botToken } = await resolveBotCredentials()
@@ -3806,14 +3860,7 @@ cli
   .option('-h, --host [host]', 'Local host (default: localhost)')
   .option('-s, --server [url]', 'Tunnel server URL')
   .option('-k, --kill', 'Kill any existing process on the port before starting')
-  .action(
-    async (options: {
-      port?: string
-      tunnelId?: string | boolean
-      host?: string | boolean
-      server?: string | boolean
-      kill?: boolean
-    }) => {
+  .action(async (options) => {
       const { runTunnel, parseCommandFromArgv, CLI_NAME } = await import(
         'traforo/run-tunnel'
       )
@@ -3833,16 +3880,12 @@ cli
       // Parse command after -- from argv
       const { command } = parseCommandFromArgv(process.argv)
 
-      // Optional-value flags ([value]) can be boolean true when bare; narrow to string | undefined
-      const asOptionalString = (v: string | boolean | undefined) =>
-        typeof v === 'string' ? v : undefined
-
       await runTunnel({
         port,
-        tunnelId: asOptionalString(options.tunnelId),
-        localHost: asOptionalString(options.host),
+        tunnelId: options.tunnelId || undefined,
+        localHost: options.host || undefined,
         baseDomain: 'kimaki.dev',
-        serverUrl: asOptionalString(options.server),
+        serverUrl: options.server || undefined,
         command: command.length > 0 ? command : undefined,
         kill: options.kill,
       })
