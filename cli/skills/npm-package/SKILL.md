@@ -38,6 +38,9 @@ Use this skill when scaffolding or fixing npm packages.
    - `dist`
    - any runtime-required extra files (for example `schema.prisma`)
    - docs like `README.md` and `CHANGELOG.md`
+   - `skills/` directory if the package ships an agent skill (see "Agent
+     skill" section below). Skill files live at `skills/<name>/SKILL.md`,
+     never at the package root.
    - if tests are inside src and gets included in dist, it's fine. don't try to exclude them
 10. `scripts.build` should be `tsc && chmod +x dist/cli.js` (skip the chmod if
      the package has no bin). No bundling. Do not delete `dist/` in `build` by
@@ -111,8 +114,9 @@ import path from "node:path";
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
-// e.g. from src/cli.ts → read SKILL.md at the package root
-const skillPath = path.resolve(__dirname, "../SKILL.md");
+// e.g. from src/cli.ts → read SKILL.md under skills/<name>/SKILL.md
+// (skill files always live in skills/<name>/SKILL.md, never at the package root)
+const skillPath = path.resolve(__dirname, "../skills/mypkg/SKILL.md");
 
 // from dist/cli.js (after tsc) → reach back to src/
 const srcFile = path.resolve(__dirname, "../src/template.md");
@@ -222,6 +226,102 @@ Use Node ESM-compatible compiler settings:
 
 test files should be close with the associated source files. for example if you have an utils.ts file you will create utils.test.ts file next to it. with tests, importing from utils. preferred testing framework is vitest (or bun if project already using `bun test` or depends on bun APIs, rare)
 
+
+## Agent skill
+
+If the package ships an agent skill (SKILL.md for AI coding agents), place it
+at:
+
+```
+skills/<package-name>/SKILL.md
+```
+
+Never put `SKILL.md` at the package root. The `skills/<name>/SKILL.md` layout
+matches the convention used by the [`skills`](https://skills.sh) CLI so users
+can install it with:
+
+```bash
+npx -y skills add owner/repo
+```
+
+Add this installation snippet to the README so users know how to get the skill:
+
+```markdown
+## Agent Skill
+
+This package ships a skill file that teaches AI coding agents how and when to
+use it. Install it with:
+
+\`\`\`bash
+npx -y skills add owner/repo
+\`\`\`
+```
+
+Remember to add `skills` to the `files` array in `package.json` so the skill
+directory is included when publishing.
+
+### Keep the SKILL.md thin
+
+The SKILL.md body should be a **few lines**, not a full docs dump. Put all
+real documentation in `README.md` (which already lives in `files`) and have
+the skill tell the agent to fetch it. This way agents always read the latest
+docs and the skill never goes stale.
+
+The body stays thin, but the **frontmatter `description` must be rich**. It
+is what the agent sees in its main context, and it is the only signal the
+agent uses to decide whether to load the skill. Make it long enough to
+cover: what the package is, the core concepts and APIs, concrete trigger
+phrases the user might say, and explicit "ALWAYS load this skill when..."
+conditions. A one-sentence description is almost always too short. See the
+`new-skill` skill for full guidance on writing descriptions.
+
+**CLI package template:**
+
+```md
+---
+name: mypkg
+description: |
+  mypkg is <what it does and the core concepts>. It exposes <main commands
+  or APIs> and is used for <typical tasks>. ALWAYS load this skill when
+  the user mentions mypkg, runs <binary>, edits files that import mypkg,
+  or asks about <trigger keywords>. Load it before writing any code that
+  touches mypkg so you know the correct usage patterns and gotchas.
+---
+
+# mypkg
+
+Every time you use mypkg, you MUST run:
+
+\`\`\`bash
+mypkg --help # NEVER pipe to head/tail, read the full output
+\`\`\`
+```
+
+**Library package template:**
+
+```md
+---
+name: mypkg
+description: |
+  mypkg is <what it does and the core concepts>. It exports <main APIs>
+  and is used for <typical tasks>. ALWAYS load this skill when the user
+  mentions mypkg, imports from mypkg, edits files that depend on it, or
+  asks about <trigger keywords>. Load it before writing any code that
+  touches mypkg so you know the correct usage patterns and gotchas.
+---
+
+# mypkg
+
+Every time you work with mypkg, you MUST fetch the latest README:
+
+\`\`\`bash
+curl -s https://raw.githubusercontent.com/owner/repo/main/README.md # NEVER pipe to head/tail
+\`\`\`
+```
+
+Because the SKILL.md body points at the README, the README must contain
+everything the agent needs: API reference, examples, gotchas, and rules.
+See the `new-skill` skill for the full pattern.
 
 ## .gitignore
 
