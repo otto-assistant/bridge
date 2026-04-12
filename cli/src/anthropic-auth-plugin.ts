@@ -592,6 +592,20 @@ function toClaudeCodeToolName(name: string) {
   return OPENCODE_TO_CLAUDE_CODE_TOOL_NAME[name.toLowerCase()] ?? name;
 }
 
+/**
+ * Strips the OpenCode identity block (from "You are OpenCode…" up to the
+ * Anthropic prompt marker "Skills provide specialized instructions") and
+ * re-injects essential environment context as a small XML tag.
+ *
+ * The original OpenCode prompt between those markers contains the current
+ * working directory and other runtime context. Stripping it wholesale loses
+ * that info, so we add back what the model needs (cwd) in a compact form.
+ *
+ * Original OpenCode Anthropic prompt structure (for reference):
+ *   "You are OpenCode, the best coding agent on the planet."
+ *   + environment block (cwd, OS, shell, date, etc.)
+ *   + "Skills provide specialized instructions …"
+ */
 function sanitizeAnthropicSystemText(
   text: string,
   onError?: (msg: string) => void,
@@ -608,10 +622,16 @@ function sanitizeAnthropicSystemText(
     return text;
   }
 
-  return (text.slice(0, startIdx) + text.slice(endIdx)).replaceAll(
-    "opencode",
-    "openc0de",
-  );
+  // Re-inject the process working directory that was inside the stripped block.
+  const envContext = `\n<environment>\n<cwd>${process.cwd()}</cwd>\n</environment>\n`;
+
+  // Replace all case-insensitive whole-word occurrences of "opencode" with "openc0de"
+  const result =
+    text.slice(0, startIdx) +
+    envContext +
+    text.slice(endIdx);
+  // Use a regex with global, case-insensitive, and word boundary flags
+  return result.replace(/\bopencode\b/gi, "openc0de");
 }
 
 function mapSystemTextPart(
