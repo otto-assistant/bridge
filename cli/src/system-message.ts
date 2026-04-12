@@ -324,11 +324,17 @@ ${escapePromptText(repliedMessage.text)}
       : []),
     ...(worktree && worktreeChanged
       ? [
-          `<system-reminder>\nThis session is running inside a git worktree.\n- Worktree path: ${worktree.worktreeDirectory}\n- Branch: ${worktree.branch}\n- Main repo: ${worktree.mainRepoDirectory}\nRun checks in this worktree. Do not create another worktree by default. Ask before merging changes back to the main branch.\n</system-reminder>`,
+          `<system-reminder>\nThis session is running inside a git worktree. The working directory (cwd / pwd) has changed. The user expects you to edit files in the new cwd. You MUST operate inside the new worktree from now on.\n- New worktree path (new cwd / pwd, edit files here): ${worktree.worktreeDirectory}\n- Branch: ${worktree.branch}\n- Main repo path (previous folder, DO NOT TOUCH): ${worktree.mainRepoDirectory}\nYou MUST read, write, and edit files only under the new worktree path ${worktree.worktreeDirectory}. You MUST NOT read, write, or edit any files under the main repo path ${worktree.mainRepoDirectory} — even though it is the same project, that folder is a separate checkout and the user or another agent may be actively working there, so writing to it would override their unrelated changes. Run all checks (tests, builds, lint) inside the new worktree. Do not create another worktree by default. Ask before merging changes back to the main branch.\n</system-reminder>`,
         ]
       : []),
   ]
-  return sections.join('\n\n')
+  if (sections.length === 0) {
+    return ''
+  }
+  // Always end synthetic context with a trailing newline so it does not fuse
+  // with the next text part (for example the user's actual prompt) when the
+  // model concatenates message parts.
+  return `${sections.join('\n\n')}\n`
 }
 
 export function getOpencodeSystemMessage({
@@ -374,7 +380,7 @@ This is required to distinguish essential bash calls from read-only ones in low-
 
 Your current OpenCode session ID is: ${sessionId}${channelId ? `\nYour current Discord channel ID is: ${channelId}` : ''}${threadId ? `\nYour current Discord thread ID is: ${threadId}` : ''}${guildId ? `\nYour current Discord guild ID is: ${guildId}` : ''}
 
-Per-turn Discord metadata like the current user and current agent is delivered in synthetic user message parts. Worktree reminders are emitted only when the worktree changes.
+Per-turn Discord metadata like the current user and current agent is delivered in synthetic user message parts.
 
 ## permissions
 
