@@ -2,7 +2,7 @@
   "name": "@otto-assistant/bridge",
   "module": "index.ts",
   "type": "module",
-  "version": "0.4.103",
+  "version": "0.4.104",
   "scripts": {
     "dev": "tsx src/bin.ts",
     "prepublishOnly": "pnpm generate && pnpm tsc",
@@ -70,7 +70,7 @@
     "discord.js": "^14.25.1",
     "domhandler": "^6.0.1",
     "errore": "workspace:^",
-    "goke": "^6.6.0",
+    "goke": "^6.8.0",
     "htmlparser2": "^12.0.0",
     "kitty-graphics-agent": "^0.0.5",
     "libsql": "^0.5.22",
