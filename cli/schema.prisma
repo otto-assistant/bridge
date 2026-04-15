@@ -266,6 +266,7 @@ model forum_sync_configs {
 enum ipc_request_type {
   file_upload
   action_buttons
+  start_thread_listener
 }
 
 enum ipc_request_status {

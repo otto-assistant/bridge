@@ -172,6 +172,7 @@ describe('system-message', () => {
 
       \`--send-at\` supports the same useful options for new threads:
       - \`--notify-only\` to create a reminder thread without auto-starting a session
+      - \`--silent-prompt\` to hide the full prompt text from the Discord thread (sent as a hidden attachment so the AI still receives it, but the thread only shows a short label)
       - \`--worktree\` to create the scheduled thread as a worktree session (only if the user explicitly asks for a worktree)
       - \`--agent\` and \`--model\` to control scheduled session behavior
       - \`--user\` to add a specific user to the scheduled thread

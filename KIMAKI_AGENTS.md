@@ -1,5 +1,9 @@
 after every change always run tsc inside cli to validate your changes. try to never use as any
 
+## session learnings
+
+- silent-prompt agent-first learnings: `docs/session-learnings-2026-04-15-silent-prompt.md`
+
 do not use spawnSync. use our util execAsync. which uses spawn under the hood
 
 the important package in this repo is cli. it contains the discord bot code.
@@ -195,8 +199,8 @@ this runs `prisma generate` (for the client) and `pnpm generate:sql` (which crea
 ```ts
 try {
   await prisma.$executeRawUnsafe(
-    'ALTER TABLE table_name ADD COLUMN column_name TEXT',
-  )
+    "ALTER TABLE table_name ADD COLUMN column_name TEXT",
+  );
 } catch {
   // Column already exists
 }
@@ -494,31 +498,30 @@ prefer existing derivation helpers from `event-stream-state.ts` (for example
 `wasRecentlyAborted`) over new mirrored flags:
 
 ```ts
-
 export function deriveRunOutcome({
   events,
   sessionId,
   idleEventIndex,
 }: {
-  events: EventBufferEntry[]
-  sessionId: string
-  idleEventIndex: number
+  events: EventBufferEntry[];
+  sessionId: string;
+  idleEventIndex: number;
 }): RunOutcome {
   const isBusy = isSessionBusy({
     events,
     sessionId,
     upToIndex: idleEventIndex,
-  })
+  });
   const wasAbort = wasRecentlyAborted({
     events,
     sessionId,
     idleEventIndex,
-  })
+  });
   return {
     isBusy,
     wasAbort,
     shouldShowFooter: !isBusy && !wasAbort,
-  }
+  };
 }
 ```
 
@@ -582,6 +585,7 @@ manage threads, convert markdown, and handle Block Kit.
 when working on the slack bridge, consult these docs:
 
 **core concepts:**
+
 - Slack API overview: https://api.slack.com/docs
 - Bot user tokens (xoxb): https://api.slack.com/authentication/token-types
 - Event subscriptions (webhook mode): https://api.slack.com/events
@@ -592,6 +596,7 @@ when working on the slack bridge, consult these docs:
 - Block Kit Builder (interactive playground): https://app.slack.com/block-kit-builder
 
 **web API methods we use:**
+
 - chat.postMessage: https://api.slack.com/methods/chat.postMessage
 - chat.update: https://api.slack.com/methods/chat.update
 - chat.delete: https://api.slack.com/methods/chat.delete
@@ -611,21 +616,25 @@ when working on the slack bridge, consult these docs:
 - files.completeUploadExternal: https://api.slack.com/methods/files.completeUploadExternal
 
 **threading model:**
+
 - Slack threads use `thread_ts` (parent message timestamp), not separate IDs
 - Creating a thread = posting a reply with `thread_ts` set to parent `ts`
 - https://api.slack.com/messaging/managing#threading
 
 **interactive components:**
+
 - Handling user interaction (block_actions, view_submission): https://api.slack.com/interactivity/handling
 - Slash commands: https://api.slack.com/interactivity/slash-commands
 - Modals (views): https://api.slack.com/surfaces/modals
 - Response URLs: https://api.slack.com/interactivity/handling#message_responses
 
 **npm packages:**
+
 - @slack/web-api: https://www.npmjs.com/package/@slack/web-api
 - types are in opensrc: `opensrc/repos/github.com/slackapi/node-slack-sdk/packages/web-api/src/types/`
 - do NOT use @slack/socket-mode or @slack/bolt — we use webhook mode only
 
 **slack mrkdwn format:**
+
 - Slack uses `*bold*` (not `**bold**`), `~strike~` (not `~~strike~~`), `<url|text>` (not `[text](url)`)
 - Full reference: https://api.slack.com/reference/surfaces/formatting
