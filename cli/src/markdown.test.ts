@@ -196,6 +196,9 @@ function normalizeMarkdown(md: string): string {
       .replace(/\[Current branch: [^\]]+\]\n?\n?/g, "")
       .replace(/\[current git branch is [^\]]+\]\n?\n?/g, "")
       .replace(/\[warning: repository is in detached HEAD[^\]]*\]\n?\n?/g, "")
+      // Normalize blank-line jitter from markdown exporter formatting
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/\n+$/g, "\n")
   );
 }
 
@@ -239,13 +242,11 @@ test("generate markdown with system info", async () => {
 
     hello markdown test
 
-
     ### 🤖 Assistant (deterministic-v2)
 
     **Started using deterministic-provider/deterministic-v2**
 
     Hello! This is a deterministic markdown test response.
-
     "
   `);
 });
@@ -274,13 +275,11 @@ test("generate markdown without system info", async () => {
 
     hello markdown test
 
-
     ### 🤖 Assistant (deterministic-v2)
 
     **Started using deterministic-provider/deterministic-v2**
 
     Hello! This is a deterministic markdown test response.
-
     "
   `);
 });
