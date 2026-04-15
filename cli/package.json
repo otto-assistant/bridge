@@ -2,7 +2,7 @@
   "name": "@otto-assistant/bridge",
   "module": "index.ts",
   "type": "module",
-  "version": "0.4.104",
+  "version": "0.4.105",
   "scripts": {
     "dev": "tsx src/bin.ts",
     "prepublishOnly": "pnpm generate && pnpm tsc",
