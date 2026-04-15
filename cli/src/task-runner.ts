@@ -1,8 +1,8 @@
 // Scheduled task runner for executing due `send --send-at` jobs in the bot process.
 
-import { type REST, Routes } from 'discord.js'
-import { createDiscordRest } from './discord-urls.js'
-import YAML from 'yaml'
+import { type REST, Routes } from "discord.js";
+import { createDiscordRest } from "./discord-urls.js";
+import YAML from "yaml";
 import {
   claimScheduledTaskRunning,
   getDuePlannedScheduledTasks,
@@ -12,18 +12,18 @@ import {
   markScheduledTaskOneShotCompleted,
   recoverStaleRunningScheduledTasks,
   type ScheduledTask,
-} from './database.js'
-import { createLogger, formatErrorWithStack, LogPrefix } from './logger.js'
-import { notifyError } from './sentry.js'
-import type { ThreadStartMarker } from './system-message.js'
+} from "./database.js";
+import { createLogger, formatErrorWithStack, LogPrefix } from "./logger.js";
+import { notifyError } from "./sentry.js";
+import type { ThreadStartMarker } from "./system-message.js";
 import {
   type ScheduledTaskPayload,
   getNextCronRun,
   getPromptPreview,
   parseScheduledTaskPayload,
-} from './task-schedule.js'
+} from "./task-schedule.js";
 
-const taskLogger = createLogger(LogPrefix.TASK)
+const taskLogger = createLogger(LogPrefix.TASK);
 
 /**
  * Post a Discord message with the prompt as a hidden text-file attachment.
@@ -38,46 +38,46 @@ async function postMessageWithPromptAttachment({
   prompt,
   embeds,
 }: {
-  rest: REST
-  channelId: string
-  displayContent: string
-  prompt: string
-  embeds?: Array<{ color: number; footer: { text: string } }>
+  rest: REST;
+  channelId: string;
+  displayContent: string;
+  prompt: string;
+  embeds?: Array<{ color: number; footer: { text: string } }>;
 }): Promise<unknown> {
   return rest.post(Routes.channelMessages(channelId), {
     body: {
       content: displayContent,
-      attachments: [{ id: 0, filename: 'prompt.md' }],
+      attachments: [{ id: 0, filename: "prompt.md" }],
       ...(embeds ? { embeds } : {}),
     },
     files: [
       {
-        name: 'prompt.md',
-        data: Buffer.from(prompt, 'utf-8'),
+        name: "prompt.md",
+        data: Buffer.from(prompt, "utf-8"),
       },
     ],
-  })
+  });
 }
 
 type StartTaskRunnerOptions = {
-  token: string
-  pollIntervalMs?: number
-  staleRunningMs?: number
-  dueBatchSize?: number
-}
+  token: string;
+  pollIntervalMs?: number;
+  staleRunningMs?: number;
+  dueBatchSize?: number;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+  return typeof value === "object" && value !== null;
 }
 
 function parseMessageId(value: unknown): string | Error {
   if (!isRecord(value)) {
-    return new Error('Discord response is not an object')
+    return new Error("Discord response is not an object");
   }
-  if (typeof value.id !== 'string') {
-    return new Error('Discord response is missing message ID')
+  if (typeof value.id !== "string") {
+    return new Error("Discord response is missing message ID");
   }
-  return value.id
+  return value.id;
 }
 
 async function executeThreadScheduledTask({
@@ -85,9 +85,9 @@ async function executeThreadScheduledTask({
   task,
   payload,
 }: {
-  rest: REST
-  task: ScheduledTask
-  payload: Extract<ScheduledTaskPayload, { kind: 'thread' }>
+  rest: REST;
+  task: ScheduledTask;
+  payload: Extract<ScheduledTaskPayload, { kind: "thread" }>;
 }): Promise<void | Error> {
   const marker: ThreadStartMarker = {
     start: true,
@@ -97,38 +97,44 @@ async function executeThreadScheduledTask({
     ...(payload.model ? { model: payload.model } : {}),
     ...(payload.username ? { username: payload.username } : {}),
     ...(payload.userId ? { userId: payload.userId } : {}),
-    ...(payload.permissions?.length ? { permissions: payload.permissions } : {}),
+    ...(payload.permissions?.length
+      ? { permissions: payload.permissions }
+      : {}),
     ...(payload.injectionGuardPatterns?.length
       ? { injectionGuardPatterns: payload.injectionGuardPatterns }
       : {}),
-  }
-  const embed = [{ color: 0x2b2d31, footer: { text: YAML.stringify(marker) } }]
+  };
+  const embed = [{ color: 0x2b2d31, footer: { text: YAML.stringify(marker) } }];
   // Newline between prefix and prompt so leading /command detection can
   // find the command on its own line.
-  const prefixedPrompt = `» **kimaki-cli:**\n${payload.prompt}`
+  const prefixedPrompt = `» **kimaki-cli:**\n${payload.prompt}`;
+  const promptForDispatch = payload.silentPrompt
+    ? payload.prompt
+    : prefixedPrompt;
 
-  const postResult = await (payload.silentPrompt
-    ? postMessageWithPromptAttachment({
-        rest,
-        channelId: payload.threadId,
-        displayContent: '» **Scheduled task**',
-        prompt: prefixedPrompt,
-        embeds: embed,
-      })
-    : rest.post(Routes.channelMessages(payload.threadId), {
-        body: {
-          content: prefixedPrompt,
+  const postResult = await (
+    payload.silentPrompt
+      ? postMessageWithPromptAttachment({
+          rest,
+          channelId: payload.threadId,
+          displayContent: "» **Scheduled task**",
+          prompt: promptForDispatch,
           embeds: embed,
-        },
-      })
+        })
+      : rest.post(Routes.channelMessages(payload.threadId), {
+          body: {
+            content: prefixedPrompt,
+            embeds: embed,
+          },
+        })
   ).catch((error) => {
     return new Error(`Failed to post scheduled thread task ${task.id}`, {
       cause: error,
-    })
-  })
+    });
+  });
 
   if (postResult instanceof Error) {
-    return postResult
+    return postResult;
   }
 }
 
@@ -137,9 +143,9 @@ async function executeChannelScheduledTask({
   task,
   payload,
 }: {
-  rest: REST
-  task: ScheduledTask
-  payload: Extract<ScheduledTaskPayload, { kind: 'channel' }>
+  rest: REST;
+  task: ScheduledTask;
+  payload: Extract<ScheduledTaskPayload, { kind: "channel" }>;
 }): Promise<void | Error> {
   const marker: ThreadStartMarker | undefined = payload.notifyOnly
     ? undefined
@@ -153,50 +159,53 @@ async function executeChannelScheduledTask({
         ...(payload.model ? { model: payload.model } : {}),
         ...(payload.username ? { username: payload.username } : {}),
         ...(payload.userId ? { userId: payload.userId } : {}),
-        ...(payload.permissions?.length ? { permissions: payload.permissions } : {}),
+        ...(payload.permissions?.length
+          ? { permissions: payload.permissions }
+          : {}),
         ...(payload.injectionGuardPatterns?.length
           ? { injectionGuardPatterns: payload.injectionGuardPatterns }
           : {}),
-      }
+      };
   const embeds = marker
     ? [{ color: 0x2b2d31, footer: { text: YAML.stringify(marker) } }]
-    : undefined
+    : undefined;
 
-  const starterResult = await (payload.silentPrompt
-    ? postMessageWithPromptAttachment({
-        rest,
-        channelId: payload.channelId,
-        displayContent: '» **Scheduled task**',
-        prompt: payload.prompt,
-        embeds,
-      })
-    : rest.post(Routes.channelMessages(payload.channelId), {
-        body: {
-          content: payload.prompt,
+  const starterResult = await (
+    payload.silentPrompt
+      ? postMessageWithPromptAttachment({
+          rest,
+          channelId: payload.channelId,
+          displayContent: "» **Scheduled task**",
+          prompt: payload.prompt,
           embeds,
-        },
-      })
+        })
+      : rest.post(Routes.channelMessages(payload.channelId), {
+          body: {
+            content: payload.prompt,
+            embeds,
+          },
+        })
   ).catch((error) => {
     return new Error(`Failed to create starter message for task ${task.id}`, {
       cause: error,
-    })
-  })
+    });
+  });
 
   if (starterResult instanceof Error) {
-    return starterResult
+    return starterResult;
   }
 
-  const starterMessageId = parseMessageId(starterResult)
+  const starterMessageId = parseMessageId(starterResult);
   if (starterMessageId instanceof Error) {
     return new Error(`Invalid starter message response for task ${task.id}`, {
       cause: starterMessageId,
-    })
+    });
   }
 
   const threadName = (payload.name || getPromptPreview(payload.prompt)).slice(
     0,
     100,
-  )
+  );
   const threadResult = await rest
     .post(Routes.threads(payload.channelId, starterMessageId), {
       body: {
@@ -207,22 +216,22 @@ async function executeChannelScheduledTask({
     .catch((error) => {
       return new Error(`Failed to create thread for task ${task.id}`, {
         cause: error,
-      })
-    })
+      });
+    });
 
   if (threadResult instanceof Error) {
-    return threadResult
+    return threadResult;
   }
 
   if (!payload.userId) {
-    return
+    return;
   }
 
-  const threadIdResult = parseMessageId(threadResult)
+  const threadIdResult = parseMessageId(threadResult);
   if (threadIdResult instanceof Error) {
     return new Error(`Invalid thread response for task ${task.id}`, {
       cause: threadIdResult,
-    })
+    });
   }
 
   const addMemberResult = await rest
@@ -231,10 +240,10 @@ async function executeChannelScheduledTask({
       return new Error(
         `Failed to add user to scheduled thread for task ${task.id}`,
         { cause: error },
-      )
-    })
+      );
+    });
   if (addMemberResult instanceof Error) {
-    return addMemberResult
+    return addMemberResult;
   }
 }
 
@@ -242,73 +251,73 @@ async function executeScheduledTask({
   rest,
   task,
 }: {
-  rest: REST
-  task: ScheduledTask
+  rest: REST;
+  task: ScheduledTask;
 }): Promise<void | Error> {
-  const payloadResult = parseScheduledTaskPayload(task.payload_json)
+  const payloadResult = parseScheduledTaskPayload(task.payload_json);
   if (payloadResult instanceof Error) {
     return new Error(`Task ${task.id} has invalid payload`, {
       cause: payloadResult,
-    })
+    });
   }
 
-  if (payloadResult.kind === 'thread') {
+  if (payloadResult.kind === "thread") {
     return executeThreadScheduledTask({
       rest,
       task,
       payload: payloadResult,
-    })
+    });
   }
 
   return executeChannelScheduledTask({
     rest,
     task,
     payload: payloadResult,
-  })
+  });
 }
 
 async function finalizeSuccessfulTask({
   task,
   completedAt,
 }: {
-  task: ScheduledTask
-  completedAt: Date
+  task: ScheduledTask;
+  completedAt: Date;
 }): Promise<void> {
-  if (task.schedule_kind === 'at') {
-    await markScheduledTaskOneShotCompleted({ taskId: task.id, completedAt })
-    return
+  if (task.schedule_kind === "at") {
+    await markScheduledTaskOneShotCompleted({ taskId: task.id, completedAt });
+    return;
   }
 
   if (!task.cron_expr) {
     await markScheduledTaskFailed({
       taskId: task.id,
       failedAt: completedAt,
-      errorMessage: 'Missing cron expression on cron task',
-    })
-    return
+      errorMessage: "Missing cron expression on cron task",
+    });
+    return;
   }
 
   // Use stored timezone, falling back to UTC (not machine local) for consistency
-  const timezone = task.timezone || 'UTC'
+  const timezone = task.timezone || "UTC";
   const nextRunResult = getNextCronRun({
     cronExpr: task.cron_expr,
     timezone,
     from: completedAt,
-  })
+  });
   if (nextRunResult instanceof Error) {
     await markScheduledTaskFailed({
       taskId: task.id,
       failedAt: completedAt,
       errorMessage: nextRunResult.message,
-    })
-    return
+    });
+    return;
   }
 
   await markScheduledTaskCronRescheduled({
     taskId: task.id,
     completedAt,
     nextRunAt: nextRunResult,
-  })
+  });
 }
 
 async function finalizeFailedTask({
@@ -316,26 +325,26 @@ async function finalizeFailedTask({
   failedAt,
   error,
 }: {
-  task: ScheduledTask
-  failedAt: Date
-  error: Error
+  task: ScheduledTask;
+  failedAt: Date;
+  error: Error;
 }): Promise<void> {
-  if (task.schedule_kind === 'cron' && task.cron_expr) {
+  if (task.schedule_kind === "cron" && task.cron_expr) {
     // Use stored timezone, falling back to UTC (not machine local) for consistency
-    const timezone = task.timezone || 'UTC'
+    const timezone = task.timezone || "UTC";
     const nextRunResult = getNextCronRun({
       cronExpr: task.cron_expr,
       timezone,
       from: failedAt,
-    })
+    });
     if (!(nextRunResult instanceof Error)) {
       await markScheduledTaskCronRetry({
         taskId: task.id,
         failedAt,
         errorMessage: error.message,
         nextRunAt: nextRunResult,
-      })
-      return
+      });
+      return;
     }
   }
 
@@ -343,41 +352,41 @@ async function finalizeFailedTask({
     taskId: task.id,
     failedAt,
     errorMessage: error.message,
-  })
+  });
 }
 
 async function processDueTask({
   rest,
   task,
 }: {
-  rest: REST
-  task: ScheduledTask
+  rest: REST;
+  task: ScheduledTask;
 }): Promise<void> {
-  const startedAt = new Date()
+  const startedAt = new Date();
   const claimed = await claimScheduledTaskRunning({
     taskId: task.id,
     startedAt,
-  })
+  });
   if (!claimed) {
-    return
+    return;
   }
 
-  const executeResult = await executeScheduledTask({ rest, task })
-  const finishedAt = new Date()
+  const executeResult = await executeScheduledTask({ rest, task });
+  const finishedAt = new Date();
 
   if (executeResult instanceof Error) {
     taskLogger.warn(
       `[task-runner] task ${task.id} failed: ${formatErrorWithStack(executeResult)}`,
-    )
+    );
     await finalizeFailedTask({
       task,
       failedAt: finishedAt,
       error: executeResult,
-    })
-    return
+    });
+    return;
   }
 
-  await finalizeSuccessfulTask({ task, completedAt: finishedAt })
+  await finalizeSuccessfulTask({ task, completedAt: finishedAt });
 }
 
 async function runTaskRunnerTick({
@@ -385,29 +394,29 @@ async function runTaskRunnerTick({
   staleRunningMs,
   dueBatchSize,
 }: {
-  rest: REST
-  staleRunningMs: number
-  dueBatchSize: number
+  rest: REST;
+  staleRunningMs: number;
+  dueBatchSize: number;
 }): Promise<void> {
-  const staleBefore = new Date(Date.now() - staleRunningMs)
+  const staleBefore = new Date(Date.now() - staleRunningMs);
   const recoveredCount = await recoverStaleRunningScheduledTasks({
     staleBefore,
-  })
+  });
   if (recoveredCount > 0) {
     taskLogger.warn(
       `[task-runner] Recovered ${recoveredCount} stale running task(s)`,
-    )
+    );
   }
 
   const dueTasks = await getDuePlannedScheduledTasks({
     now: new Date(),
     limit: dueBatchSize,
-  })
+  });
 
   await dueTasks.reduce<Promise<void>>(async (previous, task) => {
-    await previous
-    await processDueTask({ rest, task })
-  }, Promise.resolve())
+    await previous;
+    await processDueTask({ rest, task });
+  }, Promise.resolve());
 }
 
 export function startTaskRunner({
@@ -416,54 +425,54 @@ export function startTaskRunner({
   staleRunningMs = 120_000,
   dueBatchSize = 20,
 }: StartTaskRunnerOptions): () => Promise<void> {
-  const rest = createDiscordRest(token)
-  let stopped = false
-  let ticking = false
-  let tickPromise: Promise<void> | null = null
+  const rest = createDiscordRest(token);
+  let stopped = false;
+  let ticking = false;
+  let tickPromise: Promise<void> | null = null;
 
   const tick = async () => {
     if (stopped || ticking) {
-      return
+      return;
     }
 
-    ticking = true
+    ticking = true;
     const currentTickPromise = runTaskRunnerTick({
       rest,
       staleRunningMs,
       dueBatchSize,
     }).catch((error) => {
-      return new Error('Task runner tick failed', { cause: error })
-    })
+      return new Error("Task runner tick failed", { cause: error });
+    });
     tickPromise = currentTickPromise.then(() => {
-      return
-    })
-    const runResult = await currentTickPromise
+      return;
+    });
+    const runResult = await currentTickPromise;
     if (runResult instanceof Error) {
-      taskLogger.error(`[task-runner] ${formatErrorWithStack(runResult)}`)
-      void notifyError(runResult, 'Task runner tick failed')
+      taskLogger.error(`[task-runner] ${formatErrorWithStack(runResult)}`);
+      void notifyError(runResult, "Task runner tick failed");
     }
-    ticking = false
-    tickPromise = null
-  }
+    ticking = false;
+    tickPromise = null;
+  };
 
   const timer = setInterval(() => {
-    void tick()
-  }, pollIntervalMs)
+    void tick();
+  }, pollIntervalMs);
 
-  void tick()
+  void tick();
 
-  taskLogger.log(`[task-runner] started (interval=${pollIntervalMs}ms)`)
+  taskLogger.log(`[task-runner] started (interval=${pollIntervalMs}ms)`);
 
   return async () => {
     if (stopped) {
-      return
+      return;
     }
-    stopped = true
-    clearInterval(timer)
+    stopped = true;
+    clearInterval(timer);
     if (tickPromise) {
-      await tickPromise
-      tickPromise = null
+      await tickPromise;
+      tickPromise = null;
     }
-    taskLogger.log('[task-runner] stopped')
-  }
+    taskLogger.log("[task-runner] stopped");
+  };
 }
