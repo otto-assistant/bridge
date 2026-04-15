@@ -1,19 +1,26 @@
 // Scheduled task runner for executing due `send --send-at` jobs in the bot process.
 
-import { type REST, Routes } from "discord.js";
+import { Client, type REST, Routes } from "discord.js";
 import { createDiscordRest } from "./discord-urls.js";
 import YAML from "yaml";
 import {
   claimScheduledTaskRunning,
+  createIpcRequest,
+  getBotTokenWithMode,
   getDuePlannedScheduledTasks,
   markScheduledTaskCronRescheduled,
   markScheduledTaskCronRetry,
   markScheduledTaskFailed,
   markScheduledTaskOneShotCompleted,
   recoverStaleRunningScheduledTasks,
+  setThreadSession,
   type ScheduledTask,
 } from "./database.js";
 import { createLogger, formatErrorWithStack, LogPrefix } from "./logger.js";
+import {
+  buildSessionPermissions,
+  initializeOpencodeForDirectory,
+} from "./opencode.js";
 import { notifyError } from "./sentry.js";
 import type { ThreadStartMarker } from "./system-message.js";
 import {
@@ -25,42 +32,9 @@ import {
 
 const taskLogger = createLogger(LogPrefix.TASK);
 
-/**
- * Post a Discord message with the prompt as a hidden text-file attachment.
- * Used when `silentPrompt` is true so the full prompt is not visible in the
- * thread message body — only a short label is shown. The bot's
- * `getTextAttachments` helper extracts the prompt from the attachment.
- */
-async function postMessageWithPromptAttachment({
-  rest,
-  channelId,
-  displayContent,
-  prompt,
-  embeds,
-}: {
-  rest: REST;
-  channelId: string;
-  displayContent: string;
-  prompt: string;
-  embeds?: Array<{ color: number; footer: { text: string } }>;
-}): Promise<unknown> {
-  return rest.post(Routes.channelMessages(channelId), {
-    body: {
-      content: displayContent,
-      attachments: [{ id: 0, filename: "prompt.md" }],
-      ...(embeds ? { embeds } : {}),
-    },
-    files: [
-      {
-        name: "prompt.md",
-        data: Buffer.from(prompt, "utf-8"),
-      },
-    ],
-  });
-}
-
 type StartTaskRunnerOptions = {
   token: string;
+  discordClient?: Client;
   pollIntervalMs?: number;
   staleRunningMs?: number;
   dueBatchSize?: number;
@@ -108,30 +82,107 @@ async function executeThreadScheduledTask({
   // Newline between prefix and prompt so leading /command detection can
   // find the command on its own line.
   const prefixedPrompt = `» **kimaki-cli:**\n${payload.prompt}`;
-  const promptForDispatch = payload.silentPrompt
-    ? payload.prompt
-    : prefixedPrompt;
 
-  const postResult = await (
-    payload.silentPrompt
-      ? postMessageWithPromptAttachment({
-          rest,
+  // Agent-first path for silent mode: initialize opencode directly and IPC the response
+  if (payload.silentPrompt) {
+    const botRow = await getBotTokenWithMode();
+    const appId = botRow?.appId;
+    if (!appId) {
+      return new Error(`Cannot get bot appId for task ${task.id}`);
+    }
+
+    const projectDirectory =
+      task.project_directory || `/home/ubuntu/.kimaki/projects/general`;
+
+    const prevCleanup = process.env.KIMAKI_SKIP_OPENCODE_PROCESS_CLEANUP;
+    process.env.KIMAKI_SKIP_OPENCODE_PROCESS_CLEANUP = "1";
+
+    try {
+      const getClient = await initializeOpencodeForDirectory(projectDirectory);
+      if (getClient instanceof Error) {
+        return new Error(`Failed to initialize opencode for task ${task.id}`, {
+          cause: getClient,
+        });
+      }
+
+      const created = await getClient().session.create({
+        directory: projectDirectory,
+        permission: buildSessionPermissions({ directory: projectDirectory }),
+      });
+      const sessionId = created.data?.id;
+      if (!sessionId) {
+        return new Error(
+          `Failed to create opencode session for task ${task.id}`,
+        );
+      }
+
+      await getClient().session.promptAsync({
+        sessionID: sessionId,
+        directory: projectDirectory,
+        parts: [{ type: "text" as const, text: payload.prompt }],
+        ...(payload.agent ? { agent: payload.agent } : {}),
+      });
+
+      // Post invisible starter with marker embed, then delete it
+      const starterResult = await rest
+        .post(Routes.channelMessages(payload.threadId), {
+          body: { content: "", embeds: embed },
+        })
+        .catch((e) => {
+          return new Error(`Failed to post starter for task ${task.id}`, {
+            cause: e,
+          });
+        });
+      if (starterResult instanceof Error) return starterResult;
+
+      const starterId = parseMessageId(starterResult);
+      if (starterId instanceof Error) return starterId;
+
+      // Delete the starter message immediately
+      rest
+        .delete(Routes.channelMessage(payload.threadId, starterId))
+        .catch(() => {});
+
+      // Persist thread -> session and IPC so bot streams the response
+      await setThreadSession(payload.threadId, sessionId);
+      await createIpcRequest({
+        type: "start_thread_listener",
+        sessionId,
+        threadId: payload.threadId,
+        payload: JSON.stringify({
           channelId: payload.threadId,
-          displayContent: "» **Scheduled task**",
-          prompt: promptForDispatch,
-          embeds: embed,
-        })
-      : rest.post(Routes.channelMessages(payload.threadId), {
-          body: {
-            content: prefixedPrompt,
-            embeds: embed,
-          },
-        })
-  ).catch((error) => {
-    return new Error(`Failed to post scheduled thread task ${task.id}`, {
-      cause: error,
+          appId,
+          projectDirectory,
+        }),
+      });
+
+      taskLogger.log(
+        `[task ${task.id}] Agent-first thread session started (thread=${payload.threadId}, session=${sessionId})`,
+      );
+    } finally {
+      if (prevCleanup === undefined) {
+        delete process.env.KIMAKI_SKIP_OPENCODE_PROCESS_CLEANUP;
+      } else {
+        process.env.KIMAKI_SKIP_OPENCODE_PROCESS_CLEANUP = prevCleanup;
+      }
+    }
+
+    return;
+  }
+
+  // Non-silent path: post prompt visibly
+  const postResult = await rest
+    .post(Routes.channelMessages(payload.threadId), {
+      body: {
+        content: prefixedPrompt,
+        embeds: embed,
+      },
+    })
+    .catch((error) => {
+      return new Error(`Failed to post scheduled thread task ${task.id}`, {
+        cause: error,
+      });
     });
-  });
 
   if (postResult instanceof Error) {
     return postResult;
@@ -140,10 +191,12 @@ async function executeThreadScheduledTask({
 
 async function executeChannelScheduledTask({
   rest,
+  discordClient,
   task,
   payload,
 }: {
   rest: REST;
+  discordClient?: Client;
   task: ScheduledTask;
   payload: Extract<ScheduledTaskPayload, { kind: "channel" }>;
 }): Promise<void | Error> {
@@ -170,26 +223,173 @@ async function executeChannelScheduledTask({
     ? [{ color: 0x2b2d31, footer: { text: YAML.stringify(marker) } }]
     : undefined;
 
-  const starterResult = await (
-    payload.silentPrompt
-      ? postMessageWithPromptAttachment({
-          rest,
-          channelId: payload.channelId,
-          displayContent: "» **Scheduled task**",
-          prompt: payload.prompt,
-          embeds,
-        })
-      : rest.post(Routes.channelMessages(payload.channelId), {
+  const threadName = (payload.name || getPromptPreview(payload.prompt)).slice(
+    0,
+    100,
+  );
+
+  /**
+   * Agent-first path (silent, non-notify): the opencode session is created
+   * here and the prompt is submitted via SDK. No Discord message shows the
+   * user's prompt — the bot's IPC listener streams the response directly.
+   */
+  if (payload.silentPrompt && !payload.notifyOnly) {
+    // 1. Get bot appId from stored credentials and project directory from task
+    const botRow = await getBotTokenWithMode();
+    const appId = botRow?.appId;
+    if (!appId) {
+      return new Error(`Cannot get bot appId for task ${task.id}`);
+    }
+
+    const projectDirectory =
+      task.project_directory || `/home/ubuntu/.kimaki/projects/general`;
+
+    // 2. Prevent CLI exit from killing the opencode server we are about to start
+    const prevCleanup = process.env.KIMAKI_SKIP_OPENCODE_PROCESS_CLEANUP;
+    process.env.KIMAKI_SKIP_OPENCODE_PROCESS_CLEANUP = "1";
+
+    try {
+      // 3. Initialize opencode (starts server if not already running)
+      taskLogger.log(
+        `[task ${task.id}] Initializing opencode for ${projectDirectory}`,
+      );
+      const getClient = await initializeOpencodeForDirectory(projectDirectory);
+      if (getClient instanceof Error) {
+        return new Error(`Failed to initialize opencode for task ${task.id}`, {
+          cause: getClient,
+        });
+      }
+
+      // 4. Create session and queue the prompt
+      taskLogger.log(`[task ${task.id}] Creating opencode session`);
+      const created = await getClient().session.create({
+        directory: projectDirectory,
+        permission: buildSessionPermissions({ directory: projectDirectory }),
+      });
+      const sessionId = created.data?.id;
+      if (!sessionId) {
+        return new Error(
+          `Failed to create opencode session for task ${task.id}`,
+        );
+      }
+
+      await getClient().session.promptAsync({
+        sessionID: sessionId,
+        directory: projectDirectory,
+        parts: [{ type: "text" as const, text: payload.prompt }],
+        ...(payload.agent ? { agent: payload.agent } : {}),
+      });
+
+      // 5. Post an invisible starter message (marker embed only — no content, no attachment)
+      const starterResult = await rest
+        .post(Routes.channelMessages(payload.channelId), {
           body: {
-            content: payload.prompt,
+            content: "",
             embeds,
           },
         })
-  ).catch((error) => {
-    return new Error(`Failed to create starter message for task ${task.id}`, {
-      cause: error,
+        .catch((error) => {
+          return new Error(
+            `Failed to create starter message for task ${task.id}`,
+            {
+              cause: error,
+            },
+          );
+        });
+      if (starterResult instanceof Error) {
+        return starterResult;
+      }
+
+      const starterMessageId = parseMessageId(starterResult);
+      if (starterMessageId instanceof Error) {
+        return new Error(
+          `Invalid starter message response for task ${task.id}`,
+          {
+            cause: starterMessageId,
+          },
+        );
+      }
+
+      // 6. Create thread from the invisible starter message
+      taskLogger.log(`[task ${task.id}] Creating thread`);
+      const threadResult = await rest
+        .post(Routes.threads(payload.channelId, starterMessageId), {
+          body: {
+            name: threadName,
+            auto_archive_duration: 1440,
+          },
+        })
+        .catch((error) => {
+          return new Error(`Failed to create thread for task ${task.id}`, {
+            cause: error,
+          });
+        });
+      if (threadResult instanceof Error) {
+        return threadResult;
+      }
+
+      const threadIdResult = parseMessageId(threadResult);
+      if (threadIdResult instanceof Error) {
+        return new Error(`Invalid thread response for task ${task.id}`, {
+          cause: threadIdResult,
+        });
+      }
+
+      // 7. Delete the invisible starter message so it never appears in the thread
+      rest
+        .delete(Routes.channelMessage(payload.channelId, starterMessageId))
+        .catch(() => {}); // Best-effort
+
+      // 8. Persist thread -> session mapping so future messages route to this session
+      await setThreadSession(threadIdResult, sessionId);
+
+      // 9. Create IPC request so the bot's listener picks up this session
+      await createIpcRequest({
+        type: "start_thread_listener",
+        sessionId,
+        threadId: threadIdResult,
+        payload: JSON.stringify({
+          channelId: payload.channelId,
+          appId,
+          projectDirectory,
+        }),
+      });
+
+      // 10. Add user to thread if specified
+      if (payload.userId) {
+        await rest
+          .put(Routes.threadMembers(threadIdResult, payload.userId))
+          .catch(() => {}); // Best-effort
+      }
+
+      taskLogger.log(
+        `[task ${task.id}] Agent-first scheduled session started (thread=${threadIdResult}, session=${sessionId})`,
+      );
+    } finally {
+      // Restore the env var so other task executions are unaffected
+      if (prevCleanup === undefined) {
+        delete process.env.KIMAKI_SKIP_OPENCODE_PROCESS_CLEANUP;
+      } else {
+        process.env.KIMAKI_SKIP_OPENCODE_PROCESS_CLEANUP = prevCleanup;
+      }
+    }
+
+    return;
+  }
+
+  // Non-silent / notify-only path: post the prompt visibly and let the bot handle it
+  const starterResult = await rest
+    .post(Routes.channelMessages(payload.channelId), {
+      body: {
+        content: payload.notifyOnly ? "" : payload.prompt,
+        embeds,
+      },
+    })
+    .catch((error) => {
+      return new Error(`Failed to create starter message for task ${task.id}`, {
+        cause: error,
+      });
     });
-  });
 
   if (starterResult instanceof Error) {
     return starterResult;
@@ -202,10 +402,6 @@ async function executeChannelScheduledTask({
     });
   }
 
-  const threadName = (payload.name || getPromptPreview(payload.prompt)).slice(
-    0,
-    100,
-  );
   const threadResult = await rest
     .post(Routes.threads(payload.channelId, starterMessageId), {
       body: {
@@ -249,9 +445,11 @@ async function executeChannelScheduledTask({
 
 async function executeScheduledTask({
   rest,
+  discordClient,
   task,
 }: {
   rest: REST;
+  discordClient?: Client;
   task: ScheduledTask;
 }): Promise<void | Error> {
   const payloadResult = parseScheduledTaskPayload(task.payload_json);
@@ -271,6 +469,7 @@ async function executeScheduledTask({
 
   return executeChannelScheduledTask({
     rest,
+    discordClient,
     task,
     payload: payloadResult,
   });
@@ -357,9 +556,11 @@ async function finalizeFailedTask({
 
 async function processDueTask({
   rest,
+  discordClient,
   task,
 }: {
   rest: REST;
+  discordClient?: Client;
   task: ScheduledTask;
 }): Promise<void> {
   const startedAt = new Date();
@@ -371,7 +572,11 @@ async function processDueTask({
     return;
   }
 
-  const executeResult = await executeScheduledTask({ rest, task });
+  const executeResult = await executeScheduledTask({
+    rest,
+    discordClient,
+    task,
+  });
   const finishedAt = new Date();
 
   if (executeResult instanceof Error) {
@@ -391,10 +596,12 @@ async function processDueTask({
 
 async function runTaskRunnerTick({
   rest,
+  discordClient,
   staleRunningMs,
   dueBatchSize,
 }: {
   rest: REST;
+  discordClient?: Client;
   staleRunningMs: number;
   dueBatchSize: number;
 }): Promise<void> {
@@ -415,12 +622,13 @@ async function runTaskRunnerTick({
 
   await dueTasks.reduce<Promise<void>>(async (previous, task) => {
     await previous;
-    await processDueTask({ rest, task });
+    await processDueTask({ rest, discordClient, task });
   }, Promise.resolve());
 }
 
 export function startTaskRunner({
   token,
+  discordClient,
   pollIntervalMs = 5_000,
   staleRunningMs = 120_000,
   dueBatchSize = 20,
@@ -438,6 +646,7 @@ export function startTaskRunner({
     ticking = true;
     const currentTickPromise = runTaskRunnerTick({
       rest,
+      discordClient,
       staleRunningMs,
       dueBatchSize,
     }).catch((error) => {
