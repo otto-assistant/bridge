@@ -1,8 +1,10 @@
 {
   "name": "@otto-assistant/bridge",
+  "repository": "https://github.com/otto-assistant/bridge",
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org" },
   "module": "index.ts",
   "type": "module",
-  "version": "0.4.106",
+  "version": "0.5.0",
   "scripts": {
     "dev": "tsx src/bin.ts",
     "prepublishOnly": "pnpm generate && pnpm tsc",
@@ -20,11 +22,7 @@
     "format": "oxfmt src",
     "sync-skills": "tsx scripts/sync-skills.ts"
   },
-  "repository": "https://github.com/otto-assistant/bridge",
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org"
-  },
+  "repository": "https://github.com/remorses/kimaki",
   "bin": "bin.js",
   "files": [
     "dist",
@@ -59,8 +57,8 @@
     "@discordjs/voice": "^0.19.0",
     "@google/genai": "^1.46.0",
     "@libsql/client": "^0.17.2",
-    "@opencode-ai/plugin": "^1.3.7",
-    "@opencode-ai/sdk": "^1.3.7",
+    "@opencode-ai/plugin": "^1.4.6",
+    "@opencode-ai/sdk": "^1.4.6",
     "@parcel/watcher": "^2.5.6",
     "@prisma/adapter-libsql": "7.4.2",
     "@prisma/client": "7.4.2",
