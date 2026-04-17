@@ -4,8 +4,8 @@
 // Keep per-message data out of the system prompt so prompt caching can reuse
 // the same session prefix across turns.
 
-import { getDataDir } from './config.js'
-import { store } from './store.js'
+import { getDataDir } from "./config.js";
+import { store } from "./store.js";
 
 function getCritiqueInstructions(sessionId: string) {
   return `
@@ -117,7 +117,7 @@ bunx critique review --web --agent opencode --session ${sessionId} --filter "src
 \`\`\`
 
 The command prints a preview URL when done — share that URL with the user.
-`
+`;
 }
 
 const KIMAKI_TUNNEL_INSTRUCTIONS = `
@@ -209,91 +209,93 @@ tmux kill-session -t myapp-dev
 \`\`\`bash
 tmux list-sessions
 \`\`\`
-`
+`;
 
 export type WorktreeInfo = {
   /** The worktree directory path */
-  worktreeDirectory: string
+  worktreeDirectory: string;
   /** The branch name (e.g., opencode/kimaki-feature) */
-  branch: string
+  branch: string;
   /** The main repository directory */
-  mainRepoDirectory: string
-}
+  mainRepoDirectory: string;
+};
 
 export type RepliedMessageContext = {
-  authorUsername?: string
-  text: string
-}
+  authorUsername?: string;
+  text: string;
+};
 
 /** YAML marker embedded in thread starter message footer for bot to parse */
 export type ThreadStartMarker = {
   /** Whether to auto-start an AI session */
-  start?: boolean
+  start?: boolean;
   /**
    * Legacy marker for CLI-injected prompts into existing threads.
    * @deprecated New injected prompts should use `start: true` instead.
    */
-  cliThreadPrompt?: boolean
+  cliThreadPrompt?: boolean;
   /** Worktree name to create */
-  worktree?: string
+  worktree?: string;
   /** Existing worktree directory to use as working directory (must be a git worktree of the project) */
-  cwd?: string
+  cwd?: string;
   /** Discord username who initiated the thread */
-  username?: string
+  username?: string;
   /** Discord user ID who initiated the thread */
-  userId?: string
+  userId?: string;
+  /** Hidden starter prompt payload for silent agent-first thread bootstrap */
+  prompt?: string;
   /** Agent to use for the session */
-  agent?: string
+  agent?: string;
   /** Model to use (format: provider/model) */
-  model?: string
+  model?: string;
   /** Schedule kind for sessions started by scheduled tasks */
-  scheduledKind?: 'at' | 'cron'
+  scheduledKind?: "at" | "cron";
   /** Scheduled task ID that triggered this message */
-  scheduledTaskId?: number
+  scheduledTaskId?: number;
   /**
    * Per-session permission overrides as raw "tool:action" or "tool:pattern:action"
    * strings. Parsed into PermissionRuleset entries by parsePermissionRules() in
    * opencode.ts and appended after buildSessionPermissions() so they win via
    * opencode's findLast() evaluation.
    */
-  permissions?: string[]
+  permissions?: string[];
   /**
    * Per-session injection guard scan patterns (e.g. "bash:*", "webfetch:*").
    * Written to a temp file after session creation so the injection guard plugin
    * can check per-session whether scanning is enabled.
    */
-  injectionGuardPatterns?: string[]
-}
+  injectionGuardPatterns?: string[];
+};
 
 export function isInjectedPromptMarker({
   marker,
 }: {
-  marker: ThreadStartMarker | undefined
+  marker: ThreadStartMarker | undefined;
 }): boolean {
   if (!marker) {
-    return false
+    return false;
   }
-  return Boolean(marker.cliThreadPrompt || marker.start)
+  return Boolean(marker.cliThreadPrompt || marker.start);
 }
 
 export type AgentInfo = {
-  name: string
-  description?: string
-}
+  name: string;
+  description?: string;
+};
 
 function escapePromptAttribute(value: string): string {
   return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('"', '&quot;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function escapePromptText(value: string): string {
   return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 export function getOpencodePromptContext({
@@ -306,55 +308,53 @@ export function getOpencodePromptContext({
   currentAgent,
   worktreeChanged,
 }: {
-  username?: string
-  userId?: string
-  sourceMessageId?: string
-  sourceThreadId?: string
-  repliedMessage?: RepliedMessageContext
-  worktree?: WorktreeInfo
-  currentAgent?: string
-  worktreeChanged?: boolean
+  username?: string;
+  userId?: string;
+  sourceMessageId?: string;
+  sourceThreadId?: string;
+  repliedMessage?: RepliedMessageContext;
+  worktree?: WorktreeInfo;
+  currentAgent?: string;
+  worktreeChanged?: boolean;
 }): string {
   const userAttrs = [
-    ...(username
-      ? [` name="${escapePromptAttribute(username)}"`]
-      : []),
-    ...(userId
-      ? [` user-id="${escapePromptAttribute(userId)}"`]
-      : []),
+    ...(username ? [` name="${escapePromptAttribute(username)}"`] : []),
+    ...(userId ? [` user-id="${escapePromptAttribute(userId)}"`] : []),
     ...(sourceMessageId
       ? [` message-id="${escapePromptAttribute(sourceMessageId)}"`]
       : []),
     ...(sourceThreadId
       ? [` thread-id="${escapePromptAttribute(sourceThreadId)}"`]
       : []),
-  ].join('')
+  ].join("");
   const repliedMessageXml = repliedMessage
     ? `This message was a reply to message
 
-<replied-message${repliedMessage.authorUsername ? ` author="${escapePromptAttribute(repliedMessage.authorUsername)}"` : ''}>
+<replied-message${repliedMessage.authorUsername ? ` author="${escapePromptAttribute(repliedMessage.authorUsername)}"` : ""}>
 ${escapePromptText(repliedMessage.text)}
 </replied-message>`
-    : undefined
+    : undefined;
   const sections = [
     ...(userAttrs ? [`<discord-user${userAttrs} />`] : []),
     ...(repliedMessageXml ? [repliedMessageXml] : []),
     ...(currentAgent
-      ? [`<system-reminder>\nCurrent agent: ${currentAgent}\n</system-reminder>`]
+      ? [
+          `<system-reminder>\nCurrent agent: ${currentAgent}\n</system-reminder>`,
+        ]
       : []),
     ...(worktree && worktreeChanged
       ? [
           `<system-reminder>\nThis session is running inside a git worktree. The working directory (cwd / pwd) has changed. The user expects you to edit files in the new cwd. You MUST operate inside the new worktree from now on.\n- New worktree path (new cwd / pwd, edit files here): ${worktree.worktreeDirectory}\n- Branch: ${worktree.branch}\n- Main repo path (previous folder, DO NOT TOUCH): ${worktree.mainRepoDirectory}\nYou MUST read, write, and edit files only under the new worktree path ${worktree.worktreeDirectory}. You MUST NOT read, write, or edit any files under the main repo path ${worktree.mainRepoDirectory} — even though it is the same project, that folder is a separate checkout and the user or another agent may be actively working there, so writing to it would override their unrelated changes. Run all checks (tests, builds, lint) inside the new worktree. Do not create another worktree by default. Ask before merging changes back to the main branch.\n</system-reminder>`,
         ]
       : []),
-  ]
+  ];
   if (sections.length === 0) {
-    return ''
+    return "";
   }
   // Always end synthetic context with a trailing newline so it does not fuse
   // with the next text part (for example the user's actual prompt) when the
   // model concatenates message parts.
-  return `${sections.join('\n\n')}\n`
+  return `${sections.join("\n\n")}\n`;
 }
 
 export function getOpencodeSystemMessage({
@@ -366,28 +366,28 @@ export function getOpencodeSystemMessage({
   agents,
   username,
 }: {
-  sessionId: string
-  channelId?: string
+  sessionId: string;
+  channelId?: string;
   /** Discord server/guild ID for discord_list_users tool */
-  guildId?: string
+  guildId?: string;
   /** Discord thread ID (the thread this session runs in) */
-  threadId?: string
-  channelTopic?: string
-  agents?: AgentInfo[]
-  username?: string
+  threadId?: string;
+  channelTopic?: string;
+  agents?: AgentInfo[];
+  username?: string;
 }) {
-  const userArg = ` --user ${JSON.stringify(username || 'username')}`
+  const userArg = ` --user ${JSON.stringify(username || "username")}`;
   const topicContext = channelTopic?.trim()
     ? `\n\n<channel-topic>\n${channelTopic.trim()}\n</channel-topic>`
-    : ''
+    : "";
   const availableAgentsContext =
     agents && agents.length > 0
       ? `\n\nAvailable agents:\n${agents
           .map((agent) => {
-            return `- \`${agent.name}\`${agent.description ? `: ${agent.description}` : ''}`
+            return `- \`${agent.name}\`${agent.description ? `: ${agent.description}` : ""}`;
           })
-          .join('\n')}`
-      : ''
+          .join("\n")}`
+      : "";
   return `
 The user is reading your messages from inside Discord, via kimaki.dev
 
@@ -398,7 +398,7 @@ Set \`hasSideEffect: true\` for any command that writes files, modifies repo sta
 Set \`hasSideEffect: false\` for read-only commands (e.g. ls, tree, cat, rg, grep, git status, git diff, pwd, whoami, etc).
 This is required to distinguish essential bash calls from read-only ones in low-verbosity mode.
 
-Your current OpenCode session ID is: ${sessionId}${channelId ? `\nYour current Discord channel ID is: ${channelId}` : ''}${threadId ? `\nYour current Discord thread ID is: ${threadId}` : ''}${guildId ? `\nYour current Discord guild ID is: ${guildId}` : ''}
+Your current OpenCode session ID is: ${sessionId}${channelId ? `\nYour current Discord channel ID is: ${channelId}` : ""}${threadId ? `\nYour current Discord thread ID is: ${threadId}` : ""}${guildId ? `\nYour current Discord guild ID is: ${guildId}` : ""}
 
 Per-turn Discord metadata like the current user and current agent is delivered in synthetic user message parts.
 
@@ -447,7 +447,7 @@ Only do this when the user explicitly asks to close or archive the thread, and o
 
 To search for Discord users in a guild (needed for mentions like <@userId>), run:
 
-kimaki user list --guild ${guildId || '<guildId>'} --query "username"
+kimaki user list --guild ${guildId || "<guildId>"} --query "username"
 
 This returns user IDs you can use for Discord mentions.
 ${
@@ -712,9 +712,9 @@ Use \`--wait\` when you need to:
 - **Run a task in a separate worktree** and use the result in your current session
 - **Chain sessions sequentially** where the next depends on the previous output
 `
-    : ''
+    : ""
 }
-${store.getState().critiqueEnabled ? getCritiqueInstructions(sessionId) : ''}
+${store.getState().critiqueEnabled ? getCritiqueInstructions(sessionId) : ""}
 ${KIMAKI_TUNNEL_INSTRUCTIONS}
 ## markdown formatting
 
@@ -763,5 +763,5 @@ Examples:
 
 
 ${topicContext}
-`
+`;
 }

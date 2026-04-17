@@ -1001,10 +1001,12 @@ export async function startDiscordBot({
       );
 
       const textAttachmentsContent = await getTextAttachments(starterMessage);
-      const messageText = resolveMentions(starterMessage).trim();
+      const messageText = resolveMentions(starterMessage)
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        .trim();
       const prompt = textAttachmentsContent
         ? `${messageText}\n\n${textAttachmentsContent}`
-        : messageText;
+        : messageText || marker.prompt?.trim() || "";
       if (!prompt) {
         discordLogger.log(`[BOT_SESSION] No prompt found in starter message`);
         return;

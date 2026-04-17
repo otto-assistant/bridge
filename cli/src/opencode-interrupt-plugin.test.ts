@@ -120,7 +120,7 @@ function createContext({ client }: { client: MockClient }): InterruptContext {
       register: () => {
         return
       },
-    },
+    } as InterruptContext['experimental_workspace'],
     serverUrl: new URL('http://127.0.0.1:4096'),
     $: {} as InterruptContext['$'],
   }

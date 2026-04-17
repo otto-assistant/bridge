@@ -6,6 +6,7 @@ import YAML from "yaml";
 import {
   claimScheduledTaskRunning,
   createIpcRequest,
+  getIpcRequestById,
   getBotTokenWithMode,
   getDuePlannedScheduledTasks,
   markScheduledTaskCronRescheduled,
@@ -31,6 +32,30 @@ import {
 } from "./task-schedule.js";
 
 const taskLogger = createLogger(LogPrefix.TASK);
+
+async function waitForIpcRequestCompletion({
+  requestId,
+  timeoutMs = 4_000,
+  pollMs = 100,
+}: {
+  requestId: string;
+  timeoutMs?: number;
+  pollMs?: number;
+}): Promise<true | Error> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const row = await getIpcRequestById({ id: requestId });
+    if (row?.status === "completed") {
+      return true;
+    }
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        resolve();
+      }, pollMs);
+    });
+  }
+  return new Error(`Timed out waiting for IPC request ${requestId} completion`);
+}
 
 type StartTaskRunnerOptions = {
   token: string;
@@ -116,13 +141,6 @@ async function executeThreadScheduledTask({
         );
       }
 
-      await getClient().session.promptAsync({
-        sessionID: sessionId,
-        directory: projectDirectory,
-        parts: [{ type: "text" as const, text: payload.prompt }],
-        ...(payload.agent ? { agent: payload.agent } : {}),
-      });
-
       // Post invisible starter with marker embed, then delete it
       const starterResult = await rest
         .post(Routes.channelMessages(payload.threadId), {
@@ -138,14 +156,11 @@ async function executeThreadScheduledTask({
       const starterId = parseMessageId(starterResult);
       if (starterId instanceof Error) return starterId;
 
-      // Delete the starter message immediately
-      rest
-        .delete(Routes.channelMessage(payload.threadId, starterId))
-        .catch(() => {});
+      // Keep starter message to preserve valid thread-first message in Discord UI.
 
       // Persist thread -> session and IPC so bot streams the response
       await setThreadSession(payload.threadId, sessionId);
-      await createIpcRequest({
+      const ipcRow = await createIpcRequest({
         type: "start_thread_listener",
         sessionId,
         threadId: payload.threadId,
@@ -154,6 +169,22 @@ async function executeThreadScheduledTask({
           appId,
           projectDirectory,
         }),
+      });
+
+      const ipcReady = await waitForIpcRequestCompletion({
+        requestId: ipcRow.id,
+      });
+      if (ipcReady instanceof Error) {
+        return ipcReady;
+      }
+
+      // Submit prompt AFTER listener IPC request is created so short/fast
+      // model responses are not missed before subscription is active.
+      await getClient().session.promptAsync({
+        sessionID: sessionId,
+        directory: projectDirectory,
+        parts: [{ type: "text" as const, text: payload.prompt }],
+        ...(payload.agent ? { agent: payload.agent } : {}),
       });
 
       taskLogger.log(
@@ -273,13 +304,6 @@ async function executeChannelScheduledTask({
         );
       }
 
-      await getClient().session.promptAsync({
-        sessionID: sessionId,
-        directory: projectDirectory,
-        parts: [{ type: "text" as const, text: payload.prompt }],
-        ...(payload.agent ? { agent: payload.agent } : {}),
-      });
-
       // 5. Post an invisible starter message (marker embed only — no content, no attachment)
       const starterResult = await rest
         .post(Routes.channelMessages(payload.channelId), {
@@ -335,16 +359,11 @@ async function executeChannelScheduledTask({
         });
       }
 
-      // 7. Delete the invisible starter message so it never appears in the thread
-      rest
-        .delete(Routes.channelMessage(payload.channelId, starterMessageId))
-        .catch(() => {}); // Best-effort
-
-      // 8. Persist thread -> session mapping so future messages route to this session
+      // 7. Persist thread -> session mapping so future messages route to this session
       await setThreadSession(threadIdResult, sessionId);
 
-      // 9. Create IPC request so the bot's listener picks up this session
-      await createIpcRequest({
+      // 8. Create IPC request so the bot's listener picks up this session
+      const ipcRow = await createIpcRequest({
         type: "start_thread_listener",
         sessionId,
         threadId: threadIdResult,
@@ -355,7 +374,23 @@ async function executeChannelScheduledTask({
         }),
       });
 
-      // 10. Add user to thread if specified
+      const ipcReady = await waitForIpcRequestCompletion({
+        requestId: ipcRow.id,
+      });
+      if (ipcReady instanceof Error) {
+        return ipcReady;
+      }
+
+      // Submit prompt AFTER listener IPC request is created so short/fast
+      // model responses are not missed before subscription is active.
+      await getClient().session.promptAsync({
+        sessionID: sessionId,
+        directory: projectDirectory,
+        parts: [{ type: "text" as const, text: payload.prompt }],
+        ...(payload.agent ? { agent: payload.agent } : {}),
+      });
+
+      // 9. Add user to thread if specified
       if (payload.userId) {
         await rest
           .put(Routes.threadMembers(threadIdResult, payload.userId))

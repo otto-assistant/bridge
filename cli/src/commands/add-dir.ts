@@ -150,10 +150,12 @@ export async function handleAddDirCommand({
   }
 
   try {
+    // SDK types don't include 'permission' yet — upstream added this API
+    // for session permission updates (add-dir). Cast to bypass until SDK catches up.
     const updateResponse = await client.session.update({
       sessionID: sessionId,
       permission: buildAddDirPermissionRules({ resolvedPattern }),
-    })
+    } as Parameters<typeof client.session.update>[0])
     if (updateResponse.error) {
       await command.editReply('Failed to update session permissions')
       return

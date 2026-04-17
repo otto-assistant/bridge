@@ -11,6 +11,7 @@ import { createPluginLogger, formatPluginErrorWithStack, setPluginLogFilePath } 
 import { initSentry, notifyError } from './sentry.js'
 
 const logger = createPluginLogger('OPENCODE')
+
 const TOAST_SESSION_MARKER_SEPARATOR = ' '
 
 type PluginHooks = Awaited<ReturnType<Plugin>>
@@ -177,11 +178,13 @@ async function handleSystemTransform({
   output,
   sessions,
   client,
+  dataDir,
 }: {
   input: SystemTransformInput
   output: SystemTransformOutput
   sessions: Map<string, SessionState>
   client: Parameters<Plugin>[0]['client']
+  dataDir: string | undefined
 }): Promise<void> {
   const sessionId = input.sessionID
   if (!sessionId) {
@@ -284,6 +287,7 @@ const systemPromptDriftPlugin: Plugin = async ({ client, directory }) => {
                   output,
                   sessions,
                   client,
+                  dataDir,
                 })
               },
               catch: (error) => {

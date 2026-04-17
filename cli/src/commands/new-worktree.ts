@@ -324,13 +324,15 @@ async function denyPreviousCheckoutForExistingSession({
 
   const updateResult = await errore.tryAsync({
     try: async () => {
+      // SDK types don't include 'permission' yet — upstream added this API
+      // for session permission updates (worktree isolation). Cast to bypass.
       await client.session.update({
         sessionID: sessionId,
         permission: buildExternalDirectoryPermissionRules({
           resolvedPattern: projectDirectory.replaceAll('\\', '/'),
           action: 'deny',
         }),
-      })
+      } as Parameters<typeof client.session.update>[0])
     },
     catch: (e) =>
       new Error('Failed to deny previous checkout for existing session', {

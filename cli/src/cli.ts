@@ -39,7 +39,7 @@ import {
   type ChannelWithTags,
 } from "./discord-bot.js";
 
-import { buildSessionPermissions } from "./opencode.js";
+// initializeOpencodeForDirectory is imported from discord-bot re-export.
 import {
   getBotTokenWithMode,
   ensureServiceAuthToken,
@@ -58,9 +58,6 @@ import {
   updateScheduledTask,
   getSessionStartSourcesBySessionIds,
   deleteChannelDirectoryById,
-  // used by --no-message flow
-  setThreadSession,
-  createIpcRequest,
 } from "./database.js";
 import { ShareMarkdown } from "./markdown.js";
 import {
@@ -3054,6 +3051,7 @@ cli
           ? undefined
           : {
               start: true,
+              ...(noMessage && { prompt }),
               ...(worktreeName && { worktree: worktreeName }),
               ...(resolvedCwd && { cwd: resolvedCwd }),
               ...(resolvedUser && {
@@ -3075,9 +3073,8 @@ cli
 
         if (noMessage) {
           // Special flow: create an invisible starter message + thread, then
-          // create an OpenCode session and submit the prompt via SDK so the
-          // agent responds first inside the thread. Finally persist mapping
-          // and notify the running bot via IPC.
+          // remove the hidden prompt from the embed/footer via a follow-up IPC
+          // action after the runtime listener has started.
           let starterMessage: { id: string } | undefined;
           let threadData: { id: string; name?: string } | undefined;
           try {
@@ -3085,7 +3082,10 @@ cli
             starterMessage = (await rest.post(
               Routes.channelMessages(channelId),
               {
-                body: { content: "\u200B", flags: 4096 },
+                body: {
+                  content: "\u200B",
+                  flags: 4096,
+                },
               },
             )) as { id: string };
 
@@ -3112,58 +3112,37 @@ cli
               );
             }
 
-            // Initialize OpenCode client for the project directory
-            cliLogger.log("Initializing OpenCode for directory...");
-            process.env.KIMAKI_SKIP_OPENCODE_PROCESS_CLEANUP = "1";
-            const getClient =
-              await initializeOpencodeForDirectory(projectDirectory);
-            if (getClient instanceof Error) {
-              throw getClient;
-            }
-
-            // Create a new session and enqueue the prompt via promptAsync
-            cliLogger.log("Creating OpenCode session...");
-            const created = await getClient().session.create({
-              directory: projectDirectory,
-              permission: buildSessionPermissions({
-                directory: projectDirectory,
-              }),
-            });
-            const sessionId = created.data?.id;
-            if (!sessionId) {
-              throw new Error("Failed to create OpenCode session");
-            }
-
-            cliLogger.log(
-              "Submitting prompt via opencode.session.promptAsync...",
-            );
-            await getClient().session.promptAsync({
-              sessionID: sessionId,
-              directory: projectDirectory,
-              parts: [{ type: "text" as const, text: prompt }],
-              ...(options.agent ? { agent: options.agent } : {}),
-            });
-
-            // Persist mapping thread -> session and create IPC request for bot
-            await setThreadSession(threadData.id, sessionId);
-            await createIpcRequest({
-              type: "start_thread_listener",
-              sessionId,
-              threadId: threadData.id,
-              payload: JSON.stringify({ channelId, appId, projectDirectory }),
-            });
-
-            // Remove the invisible starter message to keep thread clean
-            try {
-              await rest.delete(
+            // Give bot ThreadCreate handler time to read hidden prompt from
+            // footer marker, then redact it from visible metadata.
+            if (autoStartEmbed && embedMarker?.prompt) {
+              await new Promise<void>((resolve) => {
+                setTimeout(() => {
+                  resolve();
+                }, 1500);
+              });
+              const redactedMarker: ThreadStartMarker = {
+                ...embedMarker,
+                prompt: undefined,
+              };
+              await rest.patch(
                 Routes.channelMessage(channelId, starterMessage.id),
-              );
-            } catch (err) {
-              cliLogger.debug(
-                "Failed to delete starter message:",
-                err instanceof Error ? err.stack : String(err),
+                {
+                  body: {
+                    content: "\u200B",
+                    flags: 4096,
+                    embeds: [
+                      {
+                        color: 0x2b2d31,
+                        footer: { text: YAML.stringify(redactedMarker) },
+                      },
+                    ],
+                  },
+                },
               );
             }
+
+            // Keep the starter message in-place so Discord thread history stays
+            // valid (avoids "couldn't load the first message" in clients).
 
             const threadUrl = `https://discord.com/channels/${channelData.guild_id}/${threadData.id}`;
             note(
@@ -3174,16 +3153,6 @@ cli
 
             process.exit(0);
           } catch (err) {
-            // Best-effort cleanup: delete starter message if created
-            try {
-              if (starterMessage && starterMessage.id) {
-                await rest.delete(
-                  Routes.channelMessage(channelId, starterMessage.id),
-                );
-              }
-            } catch (_) {
-              // ignore
-            }
             throw err;
           }
         }

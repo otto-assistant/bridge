@@ -16,6 +16,7 @@ import { showFileUploadButton } from "./commands/file-upload.js";
 import { queueActionButtonsRequest } from "./commands/action-buttons.js";
 import type { ActionButtonColor } from "./commands/action-buttons.js";
 import { getOrCreateRuntime } from "./session-handler/thread-session-runtime.js";
+import * as threadState from "./session-handler/thread-runtime-state.js";
 import { createLogger, LogPrefix } from "./logger.js";
 import { notifyError } from "./sentry.js";
 
@@ -235,6 +236,15 @@ async function dispatchRequest({
             channelId: string;
             appId: string;
             projectDirectory: string;
+            initialPrompt?: string;
+            username?: string;
+            userId?: string;
+            sourceMessageId?: string;
+            sourceThreadId?: string;
+            agent?: string;
+            model?: string;
+            permissions?: string[];
+            injectionGuardPatterns?: string[];
           },
         catch: (e) =>
           new IpcDispatchError({
@@ -285,7 +295,32 @@ async function dispatchRequest({
         channelId: parsed.channelId,
         appId: parsed.appId,
       });
+      // Ensure runtime has a session ID before subscribing, otherwise
+      // session-scoped events get dropped by the event demux guard.
+      threadState.setSessionId(req.thread_id, req.session_id);
       void runtime.startEventListener();
+
+      if (parsed.initialPrompt && parsed.initialPrompt.trim().length > 0) {
+        const enqueueResult = await runtime.enqueueIncoming({
+          prompt: parsed.initialPrompt,
+          userId: parsed.userId || "kimaki-cli",
+          username: parsed.username || "kimaki-cli",
+          sourceMessageId: parsed.sourceMessageId,
+          sourceThreadId: parsed.sourceThreadId,
+          appId: parsed.appId,
+          agent: parsed.agent,
+          model: parsed.model,
+          permissions: parsed.permissions,
+          injectionGuardPatterns: parsed.injectionGuardPatterns,
+        });
+        if (enqueueResult instanceof Error) {
+          await completeIpcRequest({
+            id: req.id,
+            response: JSON.stringify({ error: enqueueResult.message }),
+          });
+          return enqueueResult;
+        }
+      }
 
       await completeIpcRequest({
         id: req.id,
