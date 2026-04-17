@@ -26,6 +26,14 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Add upstream remote
         run: |
           git remote add upstream https://github.com/remorses/kimaki.git
@@ -46,33 +54,72 @@ jobs:
 
       - name: Merge upstream/main
         if: steps.check.outputs.has_new == 'true' || github.event.inputs.force == 'true'
+        id: merge
         run: |
           git config user.name "otto-bot"
           git config user.email "bot@otto-assistant.dev"
-          git merge upstream/main --no-edit
+          if git merge upstream/main --no-edit 2>&1; then
+            echo "conflict=false" >> $GITHUB_OUTPUT
+          else
+            # Auto-resolve known conflicts: always keep our package.json header
+            CONFLICTS=$(git diff --name-only --diff-filter=U)
+            echo "Conflicting files: $CONFLICTS"
+            for FILE in $CONFLICTS; do
+              if [ "$FILE" = "cli/package.json" ]; then
+                # Take our version entirely — the restore step will fix up fields
+                git checkout --ours -- "$FILE"
+                git add "$FILE"
+                echo "Auto-resolved $FILE (kept ours)"
+              else
+                # For other files, try taking upstream version
+                git checkout --theirs -- "$FILE"
+                git add "$FILE"
+                echo "Auto-resolved $FILE (took upstream)"
+              fi
+            done
+            git commit --no-edit
+            echo "conflict=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Restore Otto customizations
         if: steps.check.outputs.has_new == 'true' || github.event.inputs.force == 'true'
         run: |
-          # Upstream will overwrite cli/package.json name back to "kimaki"
-          # Restore our scoped package name after every merge
+          # After every merge, ensure cli/package.json has our Otto-specific fields.
+          # Upstream may have added/changed: name, repository, publishConfig.
+          # We also remove duplicate keys that git merge can introduce.
           if [ -f cli/package.json ]; then
             node -e "
               const fs = require('fs');
-              const pkg = JSON.parse(fs.readFileSync('cli/package.json', 'utf8'));
+              const raw = fs.readFileSync('cli/package.json', 'utf8');
+              const pkg = JSON.parse(raw);
+              let changed = false;
               if (pkg.name !== '@otto-assistant/bridge') {
                 pkg.name = '@otto-assistant/bridge';
+                changed = true;
+              }
+              if (pkg.repository !== 'https://github.com/otto-assistant/bridge') {
                 pkg.repository = 'https://github.com/otto-assistant/bridge';
+                changed = true;
+              }
+              if (!pkg.publishConfig || pkg.publishConfig.access !== 'public') {
                 pkg.publishConfig = { access: 'public', registry: 'https://registry.npmjs.org' };
+                changed = true;
+              }
+              if (changed) {
+                // JSON.stringify deduplicates keys automatically
                 fs.writeFileSync('cli/package.json', JSON.stringify(pkg, null, 2) + '\n');
-                console.log('Restored @otto-assistant/bridge package name');
+                console.log('Restored Otto customizations in cli/package.json');
               } else {
-                console.log('Package name already correct');
+                console.log('Package already correct');
               }
             "
             git add cli/package.json
             git diff --cached --quiet || git commit -m "chore: restore @otto-assistant/bridge package name after upstream sync"
           fi
+          # Update lockfile if package.json deps changed
+          pnpm install --no-frozen-lockfile
+          git add pnpm-lock.yaml
+          git diff --cached --quiet || git commit -m "chore: update pnpm-lock.yaml after upstream sync"
 
       - name: Push changes
         if: steps.check.outputs.has_new == 'true' || github.event.inputs.force == 'true'
