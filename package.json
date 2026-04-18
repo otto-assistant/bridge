@@ -25,6 +25,7 @@
     "string-dedent": "^3.0.2",
     "tiny-jsonc": "^1.0.2"
   },
+  "packageManager": "pnpm@10.30.3",
   "pnpm": {
     "onlyBuiltDependencies": [
       "@discordjs/opus"
