@@ -25,6 +25,7 @@ jobs:
           ref: main
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: true
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -38,6 +39,21 @@ jobs:
         run: |
           git remote add upstream https://github.com/remorses/kimaki.git
           git fetch upstream main
+
+      - name: Save pinned dependency versions
+        id: pinned-deps
+        run: |
+          # Before merge, save all non-workspace deps from cli/package.json.
+          # After merge upstream rewrites them to workspace:^ — we restore the pinned versions.
+          node -e "
+            const pkg = require('./cli/package.json');
+            const pinned = {};
+            for (const [name, ver] of Object.entries(pkg.dependencies || {})) {
+              if (!ver.startsWith('workspace:')) pinned[name] = ver;
+            }
+            require('fs').writeFileSync('/tmp/pinned-deps.json', JSON.stringify(pinned));
+            console.log('Saved pinned deps:', Object.keys(pinned).join(', '));
+          "
 
       - name: Check for new commits
         id: check
@@ -84,14 +100,14 @@ jobs:
       - name: Restore Otto customizations
         if: steps.check.outputs.has_new == 'true' || github.event.inputs.force == 'true'
         run: |
-          # After every merge, ensure cli/package.json has our Otto-specific fields.
-          # Upstream may have added/changed: name, repository, publishConfig.
-          # We also remove duplicate keys that git merge can introduce.
+          # After every merge, ensure cli/package.json has our Otto-specific fields
+          # AND pinned npm versions (upstream uses workspace:^ for submodules).
           if [ -f cli/package.json ]; then
             node -e "
               const fs = require('fs');
-              const raw = fs.readFileSync('cli/package.json', 'utf8');
-              const pkg = JSON.parse(raw);
+              const pkg = JSON.parse(fs.readFileSync('cli/package.json', 'utf8'));
+              let pinned = {};
+              try { pinned = JSON.parse(fs.readFileSync('/tmp/pinned-deps.json', 'utf8')); } catch {}
               let changed = false;
               if (pkg.name !== '@otto-assistant/bridge') {
                 pkg.name = '@otto-assistant/bridge';
@@ -105,8 +121,15 @@ jobs:
                 pkg.publishConfig = { access: 'public', registry: 'https://registry.npmjs.org' };
                 changed = true;
               }
+              // Restore pinned npm versions: upstream rewrites submodule deps to workspace:^
+              for (const [name, ver] of Object.entries(pinned)) {
+                if (pkg.dependencies[name] && pkg.dependencies[name] !== ver) {
+                  pkg.dependencies[name] = ver;
+                  changed = true;
+                  console.log('Restored ' + name + ': ' + pkg.dependencies[name] + ' -> ' + ver);
+                }
+              }
               if (changed) {
-                // JSON.stringify deduplicates keys automatically
                 fs.writeFileSync('cli/package.json', JSON.stringify(pkg, null, 2) + '\n');
                 console.log('Restored Otto customizations in cli/package.json');
               } else {
@@ -114,10 +137,12 @@ jobs:
               }
             "
             git add cli/package.json
-            git diff --cached --quiet || git commit -m "chore: restore @otto-assistant/bridge package name after upstream sync"
+            git diff --cached --quiet || git commit -m "chore: restore @otto-assistant/bridge customizations after upstream sync"
           fi
           # Update lockfile if package.json deps changed
-          pnpm install --no-frozen-lockfile
+          # NPM_TOKEN warn is harmless — it's only needed for publishing, not installing public packages.
+          # Temporarily unset it to suppress the .npmrc env substitution warning.
+          NPM_TOKEN= pnpm install --no-frozen-lockfile
           git add pnpm-lock.yaml
           git diff --cached --quiet || git commit -m "chore: update pnpm-lock.yaml after upstream sync"
 
