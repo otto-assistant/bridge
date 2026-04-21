@@ -37,25 +37,27 @@ Use this skill when scaffolding or fixing npm packages.
    - `src`
    - `dist`
    - any runtime-required extra files (for example `schema.prisma`)
-   - docs like `README.md` and `CHANGELOG.md`
    - `skills/` directory if the package ships an agent skill (see "Agent
      skill" section below). Skill files live at `skills/<name>/SKILL.md`,
      never at the package root.
    - if tests are inside src and gets included in dist, it's fine. don't try to exclude them
+   - **Do NOT create package-level README.md files.** In workspaces, keep one
+     README at the repository root. Package READMEs don't get read by anyone.
+     The root README is the single source of truth for the whole project.
 10. `scripts.build` should be `tsc && chmod +x dist/cli.js` (skip the chmod if
-     the package has no bin). No bundling. Do not delete `dist/` in `build` by
-     default because forcing a clean build on every local build can cause
-     issues. Optionally include running scripts with `tsx` if needed to
-     generate build artifacts.
+    the package has no bin). No bundling. Do not delete `dist/` in `build` by
+    default because forcing a clean build on every local build can cause
+    issues. Optionally include running scripts with `tsx` if needed to
+    generate build artifacts.
 11. `prepublishOnly` must always do the cleanup before `build` (optionally run
-     generation before build when required). Always add this script:
-     ```json
-     { "prepublishOnly": "rimraf dist \"*.tsbuildinfo\" && pnpm build" }
-     ```
-     This ensures `dist/` is fresh before every `npm publish`, so deleted files
-     do not accidentally stay in the published package. Use `rimraf` here
-     instead of bare shell globs so the script behaves the same in zsh, bash,
-     and Windows shells even when no `.tsbuildinfo` file exists.
+    generation before build when required). Always add this script:
+    ```json
+    { "prepublishOnly": "rimraf dist \"*.tsbuildinfo\" && pnpm build" }
+    ```
+    This ensures `dist/` is fresh before every `npm publish`, so deleted files
+    do not accidentally stay in the published package. Use `rimraf` here
+    instead of bare shell globs so the script behaves the same in zsh, bash,
+    and Windows shells even when no `.tsbuildinfo` file exists.
 
 ## bin field
 
@@ -136,7 +138,8 @@ source files directly (via `tsx` or `bun`), so the URL points to a `.ts` file.
 After `tsc` builds to `dist/`, the URL ends with `.js`.
 
 ```ts
-const isDev = import.meta.url.endsWith(".ts") || import.meta.url.endsWith(".tsx");
+const isDev =
+  import.meta.url.endsWith(".ts") || import.meta.url.endsWith(".tsx");
 ```
 
 This is useful for conditionally resolving paths that differ between `src/` and
@@ -177,15 +180,17 @@ Use Node ESM-compatible compiler settings:
   runtimes like `tsx`, `bun`, and frameworks like Next.js that expect `.ts`
   extensions, while the published `dist/` has correct `.js` imports that Node.js
   and other consumers resolve without issues.
+
   ```ts
   // source (src/index.ts) — use .ts/.tsx extensions
-  import { helper } from './utils.ts'
-  import { Button } from './button.tsx'
+  import { helper } from "./utils.ts";
+  import { Button } from "./button.tsx";
 
   // emitted output (dist/index.js) — tsc rewrites to .js
   // import { helper } from './utils.js'
   // import { Button } from './button.js'
   ```
+
 - Only relative imports are rewritten. Path aliases (`paths` in tsconfig) are
   not supported by `rewriteRelativeImportExtensions` — this is fine since npm
   packages should use relative imports anyway.
@@ -220,7 +225,6 @@ Use Node ESM-compatible compiler settings:
   }
 }
 ```
-
 
 ## Package.json `imports` map (internal `#` aliases)
 
@@ -306,7 +310,7 @@ This only works when:
   "imports": {
     "#sqlite": {
       "node": {
-        "types": "./src/platform/node/sqlite.ts",   // ❌ don't do this
+        "types": "./src/platform/node/sqlite.ts", // ❌ don't do this
         "default": "./dist/platform/node/sqlite.js"
       }
     }
@@ -328,7 +332,6 @@ Source of truth: [TypeScript Modules Reference — package.json "imports" and se
 ## tests location
 
 test files should be close with the associated source files. for example if you have an utils.ts file you will create utils.test.ts file next to it. with tests, importing from utils. preferred testing framework is vitest (or bun if project already using `bun test` or depends on bun APIs, rare)
-
 
 ## Agent skill
 
@@ -552,10 +555,44 @@ jobs:
 If the repo has Prisma schemas, add generate steps before tests:
 
 ```yaml
-      - name: Generate Prisma client
-        run: pnpm generate
-        working-directory: cli
+- name: Generate Prisma client
+  run: pnpm generate
+  working-directory: cli
 ```
+
+## README
+
+for the first section of readme use markup like this
+
+```md
+<div align='center'>
+    <br/>
+    <br/>
+    <h3>projectname</h3>
+    <p>8-12 words description of the project. tagline.</p>
+    <br/>
+    <br/>
+</div>
+```
+there cannot be markdown inside the html.
+
+or a variant with a logo image:
+
+```md
+<div align='center'>
+    <br/>
+    <br/>
+    <img src='https://genql.dev/banner.png' width='380px'>
+    <br/>
+    <br/>
+    <h3>Type safe Graphql query builder</h3>
+    <h4>Write Graphql queries with type validation and auto completion</h4>
+    <br/>
+    <br/>
+</div>
+```
+
+> Notice the use of h3, not h1. and h4 for the tagline
 
 ## .gitignore
 
@@ -570,9 +607,10 @@ dist
 
 Workspace packages inside a monorepo inherit the root `.gitignore`, so this only applies to standalone packages.
 
-
 ## common mistakes
 
 - if you need to use zod always use latest version
 - always install packages as dev dependencies if used only for scripts, testing or types only
 - if the package uses `rimraf` in scripts, install it as a dev dependency instead of relying on platform-specific shell behavior
+- never use em-dashes (—) or dashes as inline separators (like `word - word`) in README or documentation. instead restructure the sentence: use periods to split into two sentences, colons, commas, or parentheses
+- never add badge images (shields.io, etc.) or any images you don't have locally in the repo. don't invent image URLs

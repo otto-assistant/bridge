@@ -2,6 +2,7 @@
 
 import { describe, expect, test } from 'vitest'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import {
   buildAddDirPermissionRules,
@@ -27,6 +28,13 @@ describe('resolveDirectoryPermissionPattern', () => {
   })
 
   test('supports allowing every directory with *', () => {
+    expect(
+      resolveDirectoryPermissionPattern({
+        input: ' * ',
+        workingDirectory: '/repo',
+      }),
+    ).toBe('*')
+
     expect(
       buildAddDirPermissionRules({
         resolvedPattern: '*',
@@ -108,40 +116,39 @@ describe('resolveDirectoryPermissionPattern', () => {
   })
 
   test('pre-allows common toolchain caches under home with ~ patterns', () => {
+    const home = os.homedir().replaceAll('\\', '/')
     expect(
       buildSessionPermissions({
         directory: '/Users/me/project',
       }).filter((rule) => {
         return [
-          '~/.cache/zig',
-          '~/.cargo',
-          '~/.cache/go-build',
-          '~/go/pkg',
+          `${home}/.cache/zig`,
+          `${home}/.cargo`,
+          `${home}/.cache/go-build`,
+          `${home}/go/pkg`,
         ].includes(rule.pattern)
       }),
-    ).toMatchInlineSnapshot(`
-      [
-        {
-          "action": "allow",
-          "pattern": "~/.cache/zig",
-          "permission": "external_directory",
-        },
-        {
-          "action": "allow",
-          "pattern": "~/.cargo",
-          "permission": "external_directory",
-        },
-        {
-          "action": "allow",
-          "pattern": "~/.cache/go-build",
-          "permission": "external_directory",
-        },
-        {
-          "action": "allow",
-          "pattern": "~/go/pkg",
-          "permission": "external_directory",
-        },
-      ]
-    `)
+    ).toEqual([
+      {
+        permission: 'external_directory',
+        pattern: `${home}/.cache/zig`,
+        action: 'allow',
+      },
+      {
+        permission: 'external_directory',
+        pattern: `${home}/.cargo`,
+        action: 'allow',
+      },
+      {
+        permission: 'external_directory',
+        pattern: `${home}/.cache/go-build`,
+        action: 'allow',
+      },
+      {
+        permission: 'external_directory',
+        pattern: `${home}/go/pkg`,
+        action: 'allow',
+      },
+    ])
   })
 })
