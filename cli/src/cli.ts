@@ -2422,6 +2422,14 @@ cli
     'Create notification thread without starting AI session',
   )
   .option(
+    '--silent-prompt',
+    'Hide prompt text from Discord thread (send as hidden attachment)',
+  )
+  .option(
+    '--no-message',
+    'Create thread without visible prompt message (agent responds first)',
+  )
+  .option(
     '--worktree [name]',
     'Create git worktree for session (name optional, derives from thread name)',
   )
@@ -2472,6 +2480,8 @@ cli
           thread: threadId,
           session: sessionId,
         } = options
+        let noMessage: boolean | undefined = options.noMessage
+        let silentPrompt: boolean | undefined = options.silentPrompt
         let name: string | undefined = options.name || undefined
         const { project: projectPath } = options
         const sendAt = options.sendAt
@@ -2494,6 +2504,14 @@ cli
         const resolvedProjectPath = existingThreadMode
           ? undefined
           : projectPath || (!channelId ? '.' : undefined)
+
+        // For immediate new-thread sends, --silent-prompt should be fully silent:
+        // no visible starter prompt, and agent response should be first.
+        // Reuse the existing agent-first path by switching to noMessage mode.
+        if (silentPrompt && !existingThreadMode && !sendAt) {
+          noMessage = true
+          silentPrompt = false
+        }
 
         if (!prompt) {
           cliLogger.error('Prompt is required. Use --prompt <prompt>')
@@ -2553,6 +2571,16 @@ cli
           process.exit(EXIT_NO_RESTART)
         }
 
+        if (silentPrompt && notifyOnly) {
+          cliLogger.error('Cannot use --silent-prompt with --notify-only')
+          process.exit(EXIT_NO_RESTART)
+        }
+
+        if (noMessage && notifyOnly) {
+          cliLogger.error('Cannot use --no-message with --notify-only')
+          process.exit(EXIT_NO_RESTART)
+        }
+
         if (existingThreadMode) {
           const incompatibleFlags: string[] = []
           if (notifyOnly) {
@@ -2569,6 +2597,9 @@ cli
           }
           if (options.user) {
             incompatibleFlags.push('--user')
+          }
+          if (noMessage) {
+            incompatibleFlags.push('--no-message')
           }
           if (!sendAt && options.agent) {
             incompatibleFlags.push('--agent')
@@ -2765,6 +2796,7 @@ cli
               kind: 'thread',
               threadId: targetThreadId,
               prompt,
+              silentPrompt: Boolean(silentPrompt),
               agent: options.agent || null,
               model: options.model || null,
               username: null,
@@ -2941,6 +2973,7 @@ cli
             prompt,
             name: name || null,
             notifyOnly: Boolean(notifyOnly),
+            silentPrompt: Boolean(silentPrompt),
             worktreeName: worktreeName || null,
             cwd: resolvedCwd || null,
             agent: options.agent || null,
@@ -2971,72 +3004,146 @@ cli
           process.exit(0)
         }
 
-        // Embed marker for auto-start sessions (unless --notify-only)
-        // Bot parses this YAML to know it should start a session, optionally create a worktree, and set initial user
-        const embedMarker: ThreadStartMarker | undefined = notifyOnly
-          ? undefined
+        // ── New thread creation ──────────────────────────────────
+        // CLI creates Discord thread with embed marker, bot's ThreadCreate
+        // handler picks it up and starts the session. No IPC needed —
+        // CLI and bot are separate processes with separate opencode servers.
+
+        // Notify-only: create empty visible starter + thread, then exit
+        if (notifyOnly) {
+          cliLogger.log('Creating notify-only starter message...')
+          const notifyStarter = (await rest.post(
+            Routes.channelMessages(channelId),
+            { body: { content: '' } },
+          )) as { id: string }
+
+          cliLogger.log('Creating thread...')
+          const notifyThread = (await rest.post(
+            Routes.threads(channelId, notifyStarter.id),
+            {
+              body: {
+                name: threadName.slice(0, 100),
+                auto_archive_duration: 1440,
+              },
+            },
+          )) as { id: string; name: string }
+
+          if (resolvedUser) {
+            cliLogger.log(
+              `Adding user ${resolvedUser.username} to thread...`,
+            )
+            await rest
+              .put(Routes.threadMembers(notifyThread.id, resolvedUser.id))
+              .catch(() => {})
+          }
+
+          const notifyUrl = `https://discord.com/channels/${channelData.guild_id}/${notifyThread.id}`
+          note(
+            `Thread: ${notifyThread.name || notifyThread.id}\n\nURL: ${notifyUrl}`,
+            '✅ Thread Created',
+          )
+          cliLogger.log(notifyUrl)
+          process.exit(0)
+        }
+
+        // Embed marker for auto-start sessions.
+        // Bot's ThreadCreate handler parses this YAML to start a session,
+        // optionally create a worktree, set initial user, etc.
+        const embedMarker: ThreadStartMarker = {
+          start: true,
+          ...(noMessage && { prompt }),
+          ...(worktreeName && { worktree: worktreeName }),
+          ...(resolvedCwd && { cwd: resolvedCwd }),
+          ...(resolvedUser && {
+            username: resolvedUser.username,
+            userId: resolvedUser.id,
+          }),
+          ...(options.agent && { agent: options.agent }),
+          ...(options.model && { model: options.model }),
+          ...(options.permission?.length && { permissions: options.permission }),
+          ...(options.injectionGuard?.length && { injectionGuardPatterns: options.injectionGuard }),
+        }
+        const autoStartEmbed = [
+          { color: 0x2b2d31, footer: { text: YAML.stringify(embedMarker) } },
+        ]
+
+        // Create starter message
+        const starterBody = noMessage
+          ? { content: '\u200B', flags: 4096, embeds: autoStartEmbed }
           : {
-              start: true,
-              ...(worktreeName && { worktree: worktreeName }),
-              ...(resolvedCwd && { cwd: resolvedCwd }),
-              ...(resolvedUser && {
-                username: resolvedUser.username,
-                userId: resolvedUser.id,
-              }),
-              ...(options.agent && { agent: options.agent }),
-              ...(options.model && { model: options.model }),
-              ...(options.permission?.length && { permissions: options.permission }),
-              ...(options.injectionGuard?.length && { injectionGuardPatterns: options.injectionGuard }),
+              content: prompt,
+              embeds: autoStartEmbed,
             }
-        const autoStartEmbed = embedMarker
-          ? [{ color: 0x2b2d31, footer: { text: YAML.stringify(embedMarker) } }]
-          : undefined
 
-        const starterMessage = await sendDiscordMessageWithOptionalAttachment({
-          channelId,
-          prompt,
-          botToken,
-          embeds: autoStartEmbed,
-          rest,
-        })
+        cliLogger.log(
+          noMessage
+            ? 'Creating invisible starter message...'
+            : 'Creating starter message...',
+        )
+        const starterMessage = (await rest.post(
+          Routes.channelMessages(channelId),
+          { body: starterBody },
+        )) as { id: string }
 
+        // Create thread from starter
         cliLogger.log('Creating thread...')
-
         const threadData = (await rest.post(
           Routes.threads(channelId, starterMessage.id),
           {
             body: {
               name: threadName.slice(0, 100),
-              auto_archive_duration: 1440, // 1 day
+              auto_archive_duration: 1440,
             },
           },
         )) as { id: string; name: string }
 
         cliLogger.log('Thread created!')
 
-        // Add user to thread if specified
+        // Add user to thread
         if (resolvedUser) {
-          cliLogger.log(`Adding user ${resolvedUser.username} to thread...`)
-          await rest.put(Routes.threadMembers(threadData.id, resolvedUser.id))
+          cliLogger.log(
+            `Adding user ${resolvedUser.username} to thread...`,
+          )
+          await rest
+            .put(Routes.threadMembers(threadData.id, resolvedUser.id))
+            .catch(() => {})
         }
 
-        const threadUrl = `https://discord.com/channels/${channelData.guild_id}/${threadData.id}`
+        // Remove the embed marker from the starter message after the bot's
+        // ThreadCreate handler has had time to read it (~1.5s). This prevents
+        // the YAML marker from being visible to users in Discord.
+        if (!notifyOnly) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, 1500)
+          })
+          const editBody = noMessage
+            ? { content: '\u200B', flags: 4096, embeds: [] }
+            : { embeds: [] }
+          await rest
+            .patch(Routes.channelMessage(channelId, starterMessage.id), {
+              body: editBody,
+            })
+            .catch(() => {})
+        }
 
+        // Success output
+        const threadUrl = `https://discord.com/channels/${channelData.guild_id}/${threadData.id}`
         const worktreeNote = worktreeName
-          ? `\nWorktree: ${worktreeName} (will be created by bot)`
+          ? `\nWorktree: ${worktreeName}`
           : resolvedCwd
             ? `\nWorking directory: ${resolvedCwd}`
             : ''
-        const successMessage = notifyOnly
-          ? `Thread: ${threadData.name}\nDirectory: ${projectDirectory}\n\nNotification created. Reply to start a session.\n\nURL: ${threadUrl}`
-          : `Thread: ${threadData.name}\nDirectory: ${projectDirectory}${worktreeNote}\n\nThe running bot will pick this up and start the session.\n\nURL: ${threadUrl}`
-
-        note(successMessage, '✅ Thread Created')
-
+        note(
+          `Thread: ${threadData.name || threadData.id}\nDirectory: ${projectDirectory}${worktreeNote}\n\nBot will start session automatically.\n\nURL: ${threadUrl}`,
+          '✅ Thread Created',
+        )
         cliLogger.log(threadUrl)
 
+        // Wait for session completion if --wait
         if (options.wait) {
-          const { waitAndOutputSession } = await import('./wait-session.js')
+          const { waitAndOutputSession } = await import(
+            './wait-session.js'
+          )
           await waitAndOutputSession({
             threadId: threadData.id,
             projectDirectory,
