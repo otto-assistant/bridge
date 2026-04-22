@@ -7,7 +7,7 @@
   },
   "module": "index.ts",
   "type": "module",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "scripts": {
     "dev": "tsx src/bin.ts",
     "prepublishOnly": "pnpm generate && pnpm tsc",
