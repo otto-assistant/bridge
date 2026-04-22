@@ -1,7 +1,10 @@
 {
   "name": "@otto-assistant/bridge",
   "repository": "https://github.com/otto-assistant/bridge",
-  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org" },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "module": "index.ts",
   "type": "module",
   "version": "0.6.0",
