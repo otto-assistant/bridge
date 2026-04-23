@@ -235,6 +235,8 @@ when using `@prisma/adapter-libsql` with `file::memory:`, always use `file::memo
 
 errore is a submodule. should always be in main. make sure it is never in detached state.
 
+when pulling submodules and they jump to a new commit, commit that submodule pointer update right away before doing other work. otherwise critique diffs later will include the noisy submodule jump along with the real changes.
+
 it is a package for using errors as values in ts.
 
 this whole codebase uses errore.org conventions. ALWAYS read the errore skill before editing any code.
@@ -439,7 +441,7 @@ OpenCode plugin files must also avoid importing `cli/src/logger.ts`. That logger
 
 ## skills folder
 
-skills is a symlink to cli/skills. this is a folder of skills for kimaki. loaded by all kimaki users. some skills are synced from github repos. see cli/scripts/sync-skills.ts. so never manually update them. instead if need to updaste them start kimaki threads on those project, found via kimaki cli.
+skills lives at the repository root in `skills/`. build and publish scripts copy it into `cli/skills/` so the npm package still ships the bundled skills. some skills are synced from github repos. see cli/scripts/sync-skills.ts. so never manually update synced copies. instead if need to update them start kimaki threads on those project, found via kimaki cli.
 
 ## discord-digital-twin e2e style
 
@@ -647,7 +649,7 @@ when summarizing changes at the end of the message, be super short, a few words 
 
 please ask questions and confirm assumptions before generating complex architecture code.
 
-NEVER run commands with & at the end to run them in the background. this is leaky and harmful! instead use tuistory for background processes so you can wait for real output, read logs, and interact with the process without guessing with sleep.
+NEVER run commands with & at the end to run them in the background. this is leaky and harmful! instead ask me to run commands in the background using tmux if needed.
 
 NEVER commit yourself unless asked to do so. I will commit the code myself.
 
@@ -1138,3 +1140,4 @@ const jsonSchema = toJSONSchema(mySchema, {
   removeAdditionalStrategy: "strict",
 });
 ```
+

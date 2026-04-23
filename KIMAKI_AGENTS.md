@@ -233,6 +233,8 @@ when using `@prisma/adapter-libsql` with `file::memory:`, always use `file::memo
 
 errore is a submodule. should always be in main. make sure it is never in detached state.
 
+when pulling submodules and they jump to a new commit, commit that submodule pointer update right away before doing other work. otherwise critique diffs later will include the noisy submodule jump along with the real changes.
+
 it is a package for using errors as values in ts.
 
 this whole codebase uses errore.org conventions. ALWAYS read the errore skill before editing any code.
@@ -437,7 +439,7 @@ OpenCode plugin files must also avoid importing `cli/src/logger.ts`. That logger
 
 ## skills folder
 
-skills is a symlink to cli/skills. this is a folder of skills for kimaki. loaded by all kimaki users. some skills are synced from github repos. see cli/scripts/sync-skills.ts. so never manually update them. instead if need to updaste them start kimaki threads on those project, found via kimaki cli.
+skills lives at the repository root in `skills/`. build and publish scripts copy it into `cli/skills/` so the npm package still ships the bundled skills. some skills are synced from github repos. see cli/scripts/sync-skills.ts. so never manually update synced copies. instead if need to update them start kimaki threads on those project, found via kimaki cli.
 
 ## discord-digital-twin e2e style
 

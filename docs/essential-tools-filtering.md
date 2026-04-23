@@ -45,7 +45,7 @@ function isEssentialToolName(toolName: string): boolean {
 ### Non-Essential Tool Categories
 
 - **Read-only navigation:** `read`, `list`, `glob`, `grep` - file discovery/viewing
-- **Skill tools:** `skill` - reusable OpenCode skills (loaded from `cli/skills/`)
+- **Skill tools:** `skill` - reusable OpenCode skills (loaded from `skills/` in the repo, copied into `cli/skills/` for publishing)
 - **Question/Input:** `question` - user interaction tools
 - **Documentation:** `webfetch` - web content fetching
 - **Todo inspection:** `todoread` - reading todo state (but `todowrite` is essential)
@@ -166,7 +166,7 @@ skills: {
 }
 ```
 
-Skills are discovered from `cli/skills/` directory (see `scripts/sync-skills.ts` for remote syncing).
+Skills are synced into the repository root `skills/` directory and the packaged `cli/skills/` copy. Runtime lookup assumes `cli/skills/` is available.
 
 ## Other Verbosity Filtering Uses
 

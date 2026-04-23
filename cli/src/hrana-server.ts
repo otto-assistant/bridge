@@ -282,33 +282,18 @@ export async function evictExistingInstance({ port }: { port: number }) {
     return
   }
 
-  await new Promise((resolve) => {
-    setTimeout(resolve, 1000)
-  })
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1000)
+    })
 
-  // Verify it's gone — if still alive, escalate to SIGKILL
-  const secondProbe = await fetch(url, {
-    signal: AbortSignal.timeout(500),
-  }).catch((e) => new FetchError({ url, cause: e }))
-  if (secondProbe instanceof Error) return
-
-  hranaLogger.log(`PID ${targetPid} still alive after SIGTERM, sending SIGKILL`)
-  const forceKillResult = errore.try({
-    try: () => {
-      process.kill(targetPid, 'SIGKILL')
-    },
-    catch: (e) =>
-      new Error('Failed to send SIGKILL to existing kimaki process', {
-        cause: e,
-      }),
-  })
-  if (forceKillResult instanceof Error) {
-    hranaLogger.log(
-      `Failed to force-kill PID ${targetPid}: ${forceKillResult.message}`,
-    )
-    return
+    // Verify it's gone. Some shutdown paths need a few seconds to run cleanup,
+    // so we avoid SIGKILL and just poll for up to 10 seconds.
+    const secondProbe = await fetch(url, {
+      signal: AbortSignal.timeout(2000),
+    }).catch((e) => new FetchError({ url, cause: e }))
+    if (secondProbe instanceof Error) return
   }
-  await new Promise((resolve) => {
-    setTimeout(resolve, 1000)
-  })
+
+  hranaLogger.log(`PID ${targetPid} still alive after 10s SIGTERM grace period`)
 }

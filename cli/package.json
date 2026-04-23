@@ -10,8 +10,8 @@
   "version": "0.6.2",
   "scripts": {
     "dev": "tsx src/bin.ts",
-    "prepublishOnly": "pnpm generate && pnpm tsc",
-    "build": "pnpm generate && pnpm tsc",
+    "prepublishOnly": "pnpm build",
+    "build": "pnpm prepare-skills && pnpm generate && pnpm tsc",
     "dev:bun": "DEBUG=1 bun --env-file .env src/bin.ts",
     "watch": "tsx scripts/watch-session.ts",
     "generate": "prisma generate && pnpm generate:sql",
@@ -23,6 +23,7 @@
     "register-commands": "tsx scripts/register-commands.ts",
     "lint": "lintcn lint",
     "format": "oxfmt src",
+    "prepare-skills": "rm -rf skills && mkdir -p skills && cp -R ../skills/. skills",
     "sync-skills": "tsx scripts/sync-skills.ts"
   },
   "bin": "bin.js",
