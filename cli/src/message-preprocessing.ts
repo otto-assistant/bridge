@@ -64,12 +64,40 @@ export type { PreprocessResult }
 // kimaki's local queue (same as /queue command).
 const QUEUE_SUFFIX_RE = /(?:[.!?,;:]|^)\s*queue\.?\s*$|\n\s*queue\.?\s*$/i
 const REPLIED_MESSAGE_TEXT_LIMIT = 1_000
+const TRANSPORT_METADATA_KEY_RE = /^(start|username|userId):\s*/i
+const TRANSPORT_START_TRUE_RE = /^start:\s*true\s*$/i
+const DISCORD_USER_TAG_LINE_RE = /^\s*<discord-user\b[^>]*\/>\s*$/i
 
 function extractQueueSuffix(prompt: string): { prompt: string; forceQueue: boolean } {
   if (!QUEUE_SUFFIX_RE.test(prompt)) {
     return { prompt, forceQueue: false }
   }
   return { prompt: prompt.replace(QUEUE_SUFFIX_RE, '').trimEnd(), forceQueue: true }
+}
+
+export function stripTransportMetadataBlock(prompt: string): string {
+  const lines = prompt.split('\n')
+  const firstStartIndex = lines.findIndex((line) => {
+    return TRANSPORT_START_TRUE_RE.test(line.trim())
+  })
+
+  const linesWithoutMetadataBlock = lines.filter((line, index) => {
+    if (firstStartIndex === -1 || index < firstStartIndex) {
+      return true
+    }
+    const trimmed = line.trim()
+    if (!trimmed) {
+      return true
+    }
+    return !TRANSPORT_METADATA_KEY_RE.test(trimmed)
+  })
+
+  return linesWithoutMetadataBlock
+    .filter((line) => {
+      return !DISCORD_USER_TAG_LINE_RE.test(line)
+    })
+    .join('\n')
+    .trim()
 }
 
 function shouldSkipEmptyPrompt({
@@ -267,11 +295,12 @@ export async function preprocessExistingThreadMessage({
   const prompt = textAttachmentsContent
     ? `${qs.prompt}\n\n${textAttachmentsContent}`
     : qs.prompt
+  const cleanedPrompt = stripTransportMetadataBlock(prompt)
 
   if (
     shouldSkipEmptyPrompt({
       message,
-      prompt,
+      prompt: cleanedPrompt,
       images: fileAttachments,
       hasVoiceAttachment,
     })
@@ -280,7 +309,7 @@ export async function preprocessExistingThreadMessage({
   }
 
   return {
-    prompt,
+    prompt: cleanedPrompt,
     images: fileAttachments.length > 0 ? fileAttachments : undefined,
     repliedMessage,
     mode: qs.forceQueue || voiceResult?.queueMessage ? 'local-queue' : 'opencode',
@@ -359,7 +388,8 @@ export async function preprocessNewSessionMessage({
     }
   }
 
-  const qs = extractQueueSuffix(prompt)
+  const cleanedPrompt = stripTransportMetadataBlock(prompt)
+  const qs = extractQueueSuffix(cleanedPrompt)
   if (
     shouldSkipEmptyPrompt({
       message,
@@ -435,11 +465,12 @@ export async function preprocessNewThreadMessage({
   const prompt = textAttachmentsContent
     ? `${qs.prompt}\n\n${textAttachmentsContent}`
     : qs.prompt
+  const cleanedPrompt = stripTransportMetadataBlock(prompt)
 
   if (
     shouldSkipEmptyPrompt({
       message,
-      prompt,
+      prompt: cleanedPrompt,
       images: fileAttachments,
       hasVoiceAttachment,
     })
@@ -448,7 +479,7 @@ export async function preprocessNewThreadMessage({
   }
 
   return {
-    prompt,
+    prompt: cleanedPrompt,
     images: fileAttachments.length > 0 ? fileAttachments : undefined,
     repliedMessage,
     mode: qs.forceQueue || voiceResult?.queueMessage ? 'local-queue' : 'opencode',

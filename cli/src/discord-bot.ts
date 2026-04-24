@@ -47,7 +47,10 @@ import { isVoiceAttachment } from "./voice-attachment.js";
 import { forkSessionToBtwThread } from "./commands/btw.js";
 import {
   preprocessExistingThreadMessage,
+  preprocessNewSessionMessage,
   preprocessNewThreadMessage,
+  stripTransportMetadataBlock,
+  type PreprocessResult,
 } from "./message-preprocessing.js";
 import { cancelPendingActionButtons } from "./commands/action-buttons.js";
 import {
@@ -1004,9 +1007,10 @@ export async function startDiscordBot({
       const messageText = resolveMentions(starterMessage)
         .replace(/[\u200B-\u200D\uFEFF]/g, "")
         .trim();
-      const prompt = textAttachmentsContent
+      const promptWithTransportMetadata = textAttachmentsContent
         ? `${messageText}\n\n${textAttachmentsContent}`
         : messageText || marker.prompt?.trim() || "";
+      const prompt = stripTransportMetadataBlock(promptWithTransportMetadata);
       if (!prompt) {
         discordLogger.log(`[BOT_SESSION] No prompt found in starter message`);
         return;
