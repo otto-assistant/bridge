@@ -1,5 +1,9 @@
 after every change always run tsc inside cli to validate your changes. try to never use as any
 
+## memory
+
+this project uses persistent memory blocks. always read project-scoped memory before starting work: `memory_read {"label":"project","scope":"project"}`. it contains development pipeline, architecture gotchas, and key conventions not documented elsewhere.
+
 ## session learnings
 
 - silent-prompt agent-first learnings: `docs/session-learnings-2026-04-15-silent-prompt.md`
