@@ -242,7 +242,8 @@ function buildStartupTimeoutReason({
 // Clients are created per-directory with the x-opencode-directory header.
 
 type SingleServer = {
-  process: ChildProcess
+  process: ChildProcess | null
+  pid: number
   port: number
   baseUrl: string
 }
@@ -257,6 +258,104 @@ const serverLifecycleListeners = new Set<(event: ServerLifecycleEvent) => void>(
 let processCleanupHandlersRegistered = false
 let startingServerProcess: ChildProcess | null = null
 const clientCache = new Map<string, OpencodeClient>()
+function getSharedServerStatePath(): string {
+  return path.join(getDataDir(), 'opencode-server-state.json')
+}
+
+type SharedServerState = {
+  pid: number
+  port: number
+  baseUrl: string
+}
+
+function writeSharedServerState({
+  state,
+}: {
+  state: SharedServerState
+}): void {
+  const writeResult = errore.try({
+    try: () => {
+      fs.writeFileSync(getSharedServerStatePath(), JSON.stringify(state))
+    },
+    catch: (cause) => {
+      return new Error('Failed to write shared opencode server state', { cause })
+    },
+  })
+  if (writeResult instanceof Error) {
+    opencodeLogger.warn(writeResult.message)
+  }
+}
+
+function clearSharedServerState(): void {
+  const unlinkResult = errore.try({
+    try: () => {
+      fs.unlinkSync(getSharedServerStatePath())
+    },
+    catch: (cause) => {
+      const error = cause instanceof Error ? cause : new Error(String(cause))
+      if ('code' in error && error.code === 'ENOENT') {
+        return
+      }
+      return new Error('Failed to clear shared opencode server state', { cause })
+    },
+  })
+  if (unlinkResult instanceof Error) {
+    opencodeLogger.warn(unlinkResult.message)
+  }
+}
+
+function readSharedServerState(): SharedServerState | null {
+  const parsed = errore.try({
+    try: () => {
+      const raw = fs.readFileSync(getSharedServerStatePath(), 'utf-8')
+      return JSON.parse(raw) as Partial<SharedServerState>
+    },
+    catch: (cause) => {
+      const error = cause instanceof Error ? cause : new Error(String(cause))
+      if ('code' in error && error.code === 'ENOENT') {
+        return null
+      }
+      return new Error('Failed to read shared opencode server state', { cause })
+    },
+  })
+  if (parsed instanceof Error) {
+    opencodeLogger.warn(parsed.message)
+    return null
+  }
+  if (parsed === null) {
+    return null
+  }
+  if (
+    typeof parsed.pid !== 'number' ||
+    !Number.isInteger(parsed.pid) ||
+    parsed.pid <= 0 ||
+    typeof parsed.port !== 'number' ||
+    !Number.isInteger(parsed.port) ||
+    parsed.port <= 0 ||
+    typeof parsed.baseUrl !== 'string' ||
+    parsed.baseUrl.length === 0
+  ) {
+    clearSharedServerState()
+    return null
+  }
+  return {
+    pid: parsed.pid,
+    port: parsed.port,
+    baseUrl: parsed.baseUrl,
+  }
+}
+
+function isProcessAlive({ pid }: { pid: number }): boolean {
+  return errore.try({
+    try: () => {
+      process.kill(pid, 0)
+      return true
+    },
+    catch: () => {
+      return false
+    },
+  })
+}
 
 function notifyServerLifecycle(event: ServerLifecycleEvent): void {
   for (const listener of serverLifecycleListeners) {
@@ -283,6 +382,9 @@ function killSingleServerProcessNow({
   }
 
   const serverProcess = singleServer.process
+  if (!serverProcess) {
+    return
+  }
   const pid = serverProcess.pid
   if (!pid || serverProcess.killed) {
     return
@@ -382,6 +484,11 @@ function ensureProcessCleanupHandlersRegistered(): void {
 // us spawn the binary directly and SIGTERM reaches the right process.
 let resolvedOpencodeCommand: string | null = null
 
+function looksLikeKimakiCommand(commandPath: string): boolean {
+  const normalized = path.basename(commandPath).toLowerCase()
+  return normalized === 'kimaki' || normalized === 'kimaki.cmd' || normalized === 'kimaki.bat'
+}
+
 export function resolveOpencodeCommand(): string {
   if (resolvedOpencodeCommand) {
     return resolvedOpencodeCommand
@@ -393,9 +500,14 @@ export function resolveOpencodeCommand(): string {
       output: envPath,
       isWindows: process.platform === 'win32',
     })
-    if (resolvedFromEnv) {
+    if (resolvedFromEnv && !looksLikeKimakiCommand(resolvedFromEnv)) {
       resolvedOpencodeCommand = resolvedFromEnv
       return resolvedFromEnv
+    }
+    if (resolvedFromEnv) {
+      opencodeLogger.warn(
+        `Ignoring OPENCODE_PATH because it points to kimaki (${resolvedFromEnv})`,
+      )
     }
   }
 
@@ -411,8 +523,11 @@ export function resolveOpencodeCommand(): string {
         output: commandOutput,
         isWindows,
       })
-      if (resolved) {
+      if (resolved && !looksLikeKimakiCommand(resolved)) {
         return resolved
+      }
+      if (resolved) {
+        throw new Error(`opencode command resolves to kimaki binary (${resolved})`)
       }
       throw new Error('opencode not found in PATH')
     },
@@ -519,8 +634,18 @@ async function ensureSingleServer({
   directory?: string
 } = {}): Promise<ServerStartError | SingleServer> {
   const startupDirectory = directory || preferredStartupDirectory || undefined
-  if (singleServer && !singleServer.process.killed) {
+  if (singleServer && singleServer.process && !singleServer.process.killed) {
     return singleServer
+  }
+  if (singleServer && singleServer.process === null) {
+    return singleServer
+  }
+
+  const sharedServer = await tryAdoptSharedServer({ directory: startupDirectory })
+  if (sharedServer) {
+    singleServer = sharedServer
+    notifyServerLifecycle({ type: 'started', port: sharedServer.port })
+    return sharedServer
   }
 
   // Deduplicate concurrent startup attempts
@@ -611,6 +736,8 @@ async function startSingleServer({
     opencodeLogger.warn(kimakiShimDirectory.message)
   }
   const gatewayToken = store.getState().gatewayToken
+  const opencodeConfigHomeDir = path.join(getDataDir(), 'opencode-home')
+  fs.mkdirSync(opencodeConfigHomeDir, { recursive: true })
   const vitestOpencodeEnv = (() => {
     if (process.env.KIMAKI_VITEST !== '1') {
       return {}
@@ -713,6 +840,7 @@ async function startSingleServer({
       env: {
         ...process.env,
         OPENCODE_CONFIG: opencodeConfigPath,
+        OPENCODE_CONFIG_DIR: opencodeConfigHomeDir,
         OPENCODE_PORT: port.toString(),
         KIMAKI: '1',
         KIMAKI_DATA_DIR: getDataDir(),
@@ -781,6 +909,7 @@ async function startSingleServer({
       `Opencode server exited with code: ${code}, signal: ${signal}`,
     )
     singleServer = null
+    clearSharedServerState()
     clientCache.clear()
     notifyServerLifecycle({ type: 'stopped' })
 
@@ -848,6 +977,7 @@ async function startSingleServer({
 
   const server: SingleServer = {
     process: serverProcess,
+    pid: serverProcess.pid || process.pid,
     port,
     baseUrl: `http://127.0.0.1:${port}`,
   }
@@ -855,8 +985,48 @@ async function startSingleServer({
     startingServerProcess = null
   }
   singleServer = server
+  writeSharedServerState({
+    state: {
+      pid: server.pid,
+      port: server.port,
+      baseUrl: server.baseUrl,
+    },
+  })
   notifyServerLifecycle({ type: 'started', port })
   return server
+}
+
+async function tryAdoptSharedServer({
+  directory,
+}: {
+  directory?: string
+}): Promise<SingleServer | null> {
+  const sharedState = readSharedServerState()
+  if (!sharedState) {
+    return null
+  }
+  if (!isProcessAlive({ pid: sharedState.pid })) {
+    clearSharedServerState()
+    return null
+  }
+  const healthResult = await waitForServer({
+    port: sharedState.port,
+    directory,
+    maxAttempts: 3,
+    startupStderrTail: [],
+  })
+  if (healthResult instanceof Error) {
+    return null
+  }
+  opencodeLogger.log(
+    `Adopted shared opencode server (pid: ${sharedState.pid}, port: ${sharedState.port})`,
+  )
+  return {
+    process: null,
+    pid: sharedState.pid,
+    port: sharedState.port,
+    baseUrl: sharedState.baseUrl,
+  }
 }
 
 function getOrCreateClient({
@@ -1199,12 +1369,12 @@ export async function stopOpencodeServer(): Promise<boolean> {
 
   const server = singleServer
   opencodeLogger.log(
-    `Stopping opencode server (pid: ${server.process.pid}, port: ${server.port})`,
+    `Stopping opencode server (pid: ${server.pid}, port: ${server.port})`,
   )
-  if (!server.process.killed) {
+  if (server.process && !server.process.killed) {
     const killResult = errore.try({
       try: () => {
-        server.process.kill('SIGTERM')
+        server.process!.kill('SIGTERM')
       },
       catch: (error) => {
         return new Error('Failed to send SIGTERM to opencode server', {
@@ -1221,6 +1391,7 @@ export async function stopOpencodeServer(): Promise<boolean> {
   startingServerProcess = null
 
   singleServer = null
+  clearSharedServerState()
   clientCache.clear()
   serverRetryCount = 0
   await new Promise((resolve) => {
