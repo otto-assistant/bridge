@@ -45,25 +45,17 @@ type GitState = {
 // All per-session mutable state in one place. One Map entry, one delete.
 type SessionState = {
   gitState: GitState | undefined
+  gitStateDirectory: string | undefined
+  gitStateCheckedAtMs: number
   lastMemoryReminderAssistantMessageId: string | undefined
+  latestAssistantMessage: AssistantMessageInfo | undefined
   tutorialInjected: boolean
-  // Last directory observed via session.get(). Refreshed on each real user
-  // message so directory-change reminders compare the latest observed session
-  // directory against the current request directory.
+
+  // Last directory observed from plugin input.directory.
+  // Updated on each real user message to detect cwd switches.
   resolvedDirectory: string | undefined
   // Last directory we announced via pwd injection.
   announcedDirectory: string | undefined
-}
-
-// Minimal type for the opencode plugin client (v1 SDK style with path objects).
-type PluginClient = {
-  session: {
-    get: (params: { path: { id: string } }) => Promise<{ data?: { directory?: string } }>
-    messages: (params: {
-      path: { id: string }
-      query?: { directory?: string; limit?: number }
-    }) => Promise<{ data?: Array<{ info: AssistantMessageInfo }> }>
-  }
 }
 
 // ── Pure derivation functions ────────────────────────────────────
@@ -124,6 +116,7 @@ export function shouldInjectPwd({
 }
 
 const MEMORY_REMINDER_OUTPUT_TOKENS = 12_000
+const GIT_STATE_CACHE_TTL_MS = 2_000
 
 type AssistantTokenUsage = {
   input: number
@@ -250,41 +243,9 @@ async function resolveGitState({
   }
 }
 
-// Resolve the last observed session directory via the SDK.
-// Refreshed on every real user message because sessions can switch directories
-// mid-thread and the pwd reminder must compare old vs new accurately.
-async function resolveSessionDirectory({
-  client,
-  sessionID,
-  state,
-}: {
-  client: PluginClient
-  sessionID: string
-  state: SessionState
-}): Promise<{
-  currentDirectory: string | null
-  previousDirectory: string | undefined
-}> {
-  const previousDirectory = state.resolvedDirectory
-  const result = await errore.tryAsync(() => {
-    return client.session.get({ path: { id: sessionID } })
-  })
-  if (result instanceof Error || !result.data?.directory) {
-    return {
-      currentDirectory: previousDirectory || null,
-      previousDirectory,
-    }
-  }
-  state.resolvedDirectory = result.data.directory
-  return {
-    currentDirectory: result.data.directory,
-    previousDirectory,
-  }
-}
-
 // ── Plugin ───────────────────────────────────────────────────────
 
-const contextAwarenessPlugin: Plugin = async ({ directory, client }) => {
+const contextAwarenessPlugin: Plugin = async ({ directory }) => {
   initSentry()
 
   const dataDir = process.env.KIMAKI_DATA_DIR
@@ -304,8 +265,12 @@ const contextAwarenessPlugin: Plugin = async ({ directory, client }) => {
     }
     const state: SessionState = {
       gitState: undefined,
+      gitStateDirectory: undefined,
+      gitStateCheckedAtMs: 0,
       lastMemoryReminderAssistantMessageId: undefined,
+      latestAssistantMessage: undefined,
       tutorialInjected: false,
+
       resolvedDirectory: undefined,
       announcedDirectory: undefined,
     }
@@ -355,46 +320,40 @@ const contextAwarenessPlugin: Plugin = async ({ directory, client }) => {
 
           const messageID = first.messageID
 
-          const latestAssistantMessageResult = await errore.tryAsync(() => {
-            return client.session.messages({
-              path: { id: sessionID },
-              query: { directory, limit: 20 },
-            })
-          })
-          const latestAssistantMessage =
-            latestAssistantMessageResult instanceof Error
-              ? undefined
-              : [...(latestAssistantMessageResult.data || [])]
-                  .reverse()
-                  .find((entry) => {
-                    return entry.info.role === 'assistant'
-                  })
-                  ?.info
+          const latestAssistantMessage = state.latestAssistantMessage
 
-          // -- Resolve session working directory --
-          const sessionDirectory = await resolveSessionDirectory({
-            client,
-            sessionID,
-            state,
-          })
           // The plugin request directory is the current directory Kimaki asked
-          // OpenCode to operate on for this message. Prefer it over session.get()
-          // when they disagree so reminders and MEMORY/branch context follow the
-          // new worktree immediately after a folder switch.
+          // OpenCode to operate on for this message. Keep the previous observed
+          // directory in session state to detect cwd changes without SDK calls.
           const effectiveDirectory = directory
+          const previousDirectory = state.resolvedDirectory
+          state.resolvedDirectory = effectiveDirectory
 
           // -- Branch / detached HEAD detection --
-          // Resolved early but injected last so it appears at the end of parts.
-          const gitState = await resolveGitState({ directory: effectiveDirectory })
+          // Avoid spawning git subprocesses on every turn in the same directory.
+          // Refresh only on directory change or after a short TTL.
+          const previousGitState = state.gitState
+          const now = Date.now()
+          const shouldRefreshGitState =
+            !state.gitState ||
+            state.gitStateDirectory !== effectiveDirectory ||
+            now - state.gitStateCheckedAtMs >= GIT_STATE_CACHE_TTL_MS
+          const gitState = shouldRefreshGitState
+            ? await resolveGitState({ directory: effectiveDirectory })
+            : state.gitState || null
+          if (shouldRefreshGitState) {
+            state.gitState = gitState || undefined
+            state.gitStateDirectory = effectiveDirectory
+            state.gitStateCheckedAtMs = now
+          }
 
           // -- Working directory change detection --
           const pwdResult = shouldInjectPwd({
             currentDir: effectiveDirectory,
             previousDir:
-              sessionDirectory.previousDirectory ||
-              (sessionDirectory.currentDirectory !== effectiveDirectory
-                ? sessionDirectory.currentDirectory || undefined
-                : undefined),
+              previousDirectory && previousDirectory !== effectiveDirectory
+                ? previousDirectory
+                : undefined,
             announcedDir: state.announcedDirectory,
           })
           if (pwdResult.inject) {
@@ -429,7 +388,7 @@ const contextAwarenessPlugin: Plugin = async ({ directory, client }) => {
 
           // -- Branch injection (last synthetic part) --
           const branchResult = shouldInjectBranch({
-            previousGitState: state.gitState,
+            previousGitState,
             currentGitState: gitState,
           })
           if (branchResult.inject) {
@@ -456,11 +415,34 @@ const contextAwarenessPlugin: Plugin = async ({ directory, client }) => {
       }
     },
 
-    // Clean up per-session state when sessions are deleted.
-    // Single delete instead of parallel Map/Set deletes.
+    // Keep session-local assistant metadata updated from event stream and
+    // clean up state when sessions are deleted.
     event: async ({ event }) => {
-      const cleanupResult = await errore.tryAsync({
+      const eventResult = await errore.tryAsync({
         try: async () => {
+          if (event.type === 'message.updated') {
+            const info = event.properties?.info
+            if (!info || info.role !== 'assistant' || typeof info.id !== 'string') {
+              return
+            }
+            const infoWithSession = info as { sessionID?: unknown }
+            const sessionID =
+              typeof infoWithSession.sessionID === 'string'
+                ? infoWithSession.sessionID
+                : undefined
+            if (!sessionID) {
+              return
+            }
+            const state = getOrCreateSession(sessionID)
+            state.latestAssistantMessage = {
+              id: info.id,
+              role: info.role,
+              time: info.time,
+              tokens: info.tokens,
+            }
+            return
+          }
+
           if (event.type !== 'session.deleted') {
             return
           }
@@ -474,11 +456,11 @@ const contextAwarenessPlugin: Plugin = async ({ directory, client }) => {
           return new Error('context-awareness event hook failed', { cause: error })
         },
       })
-      if (cleanupResult instanceof Error) {
+      if (eventResult instanceof Error) {
         logger.warn(
-          `[context-awareness-plugin] ${formatPluginErrorWithStack(cleanupResult)}`,
+          `[context-awareness-plugin] ${formatPluginErrorWithStack(eventResult)}`,
         )
-        void notifyError(cleanupResult, 'context-awareness plugin event hook failed')
+        void notifyError(eventResult, 'context-awareness plugin event hook failed')
       }
     },
   }
