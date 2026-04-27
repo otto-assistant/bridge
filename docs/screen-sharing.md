@@ -1,18 +1,18 @@
 ---
 title: Screen Sharing
-description: Share your machine's screen to anyone with a browser link via Kimaki.
+description: Share your machine's screen to anyone with a browser link via Otto.
 ---
 
 # Screen Sharing
 
-Share your machine's screen to anyone with a browser link. Uses VNC under the hood, bridged through a WebSocket proxy and exposed via a kimaki tunnel.
+Share your machine's screen to anyone with a browser link. Uses VNC under the hood, bridged through a WebSocket proxy and exposed via an otto tunnel.
 
 ```bash
 # Start sharing (runs in foreground, Ctrl+C to stop)
-kimaki screenshare
+otto screenshare
 
 # Run in background with tuistory
-tuistory launch "kimaki screenshare" -s screenshare
+tuistory launch "otto screenshare" -s screenshare
 ```
 
 Or use the `/screenshare` slash command in Discord — it posts the URL directly in the channel.
@@ -44,4 +44,4 @@ Requires `x11vnc` and a running X11 display (`$DISPLAY`):
 sudo apt install x11vnc
 ```
 
-Kimaki spawns `x11vnc` automatically when you start screen sharing.
+Otto spawns `x11vnc` automatically when you start screen sharing.

@@ -10,13 +10,13 @@ centralized injection point for any cross-cutting prompt transformation
 1. Discord chat messages → `discord-bot.ts` MessageCreate → `preprocess*Message` → `enqueueWithPreprocess`
 2. `/new-session` slash → `commands/session.ts` → `enqueueIncoming` directly
 3. `/queue` slash → posts Discord message with `» **user:** ...` prefix → path #1
-4. `kimaki send --thread` (existing thread) → posts `» **kimaki-cli:** <prompt>` → path #1
-5. `kimaki send --channel` (new thread) → raw starter message → bot `ThreadCreate` handler → `enqueueIncoming` with preprocess callback
+4. `otto send --thread` (existing thread) → posts `» **otto-cli:** <prompt>` → path #1
+5. `otto send --channel` (new thread) → raw starter message → bot `ThreadCreate` handler → `enqueueIncoming` with preprocess callback
 6. Scheduled tasks (`task-runner.ts`) → posts Discord messages like #4/#5
 
 Prefix conventions: `» **<username>:** ` is used for queued reposts and
 CLI-injected messages in existing threads. New-thread flows (channel-level
-`kimaki send` and channel scheduled tasks) post the raw prompt without
+`otto send` and channel scheduled tasks) post the raw prompt without
 prefix and rely on an embed marker (`ThreadStartMarker` YAML) for metadata.
 
 ## Cross-cutting transformations — do them in two places
@@ -44,7 +44,7 @@ skip the wrapping when detection succeeds.
 ## Prefer line-based detection over prefix stripping
 
 When adding a transformation that needs to match a user-intent pattern in
-prompts that sometimes carry programmatic prefixes (`» **kimaki-cli:** ...`,
+prompts that sometimes carry programmatic prefixes (`» **otto-cli:** ...`,
 `» **user:** ...`, `Context from thread: ...`), do NOT try to regex-strip
 every possible prefix before matching. That creates maintenance burden
 (new prefix formats silently break detection) and gets the semantics
@@ -132,9 +132,10 @@ is misleading for the test file which needs the explicit dependency.
 
 ## Worktree folder name ≠ branch name
 
-`getManagedWorktreeDirectory` strips the `opencode/kimaki-` prefix from the
-on-disk folder basename but the git branch name still keeps it. Two format
-helpers exist: `formatWorktreeName` (verbatim, for user-provided names) and
-`formatAutoWorktreeName` (vowel-compressed if >20 chars, for auto-derived
-names from thread titles/prompts). Worktrees now live under
-`<kimakiDataDir>/worktrees/<8charProjectHash>/<basename>`.
+`getManagedWorktreeDirectory` strips the `opencode/otto-` prefix from the
+on-disk folder basename but the git branch name still keeps it (backward
+compat: `opencode/kimaki-` prefix is also recognized for existing branches).
+Two format helpers exist: `formatWorktreeName` (verbatim, for user-provided
+names) and `formatAutoWorktreeName` (vowel-compressed if >20 chars, for
+auto-derived names from thread titles/prompts). Worktrees now live under
+`<ottoDataDir>/worktrees/<8charProjectHash>/<basename>`.

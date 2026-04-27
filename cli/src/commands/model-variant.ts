@@ -25,7 +25,7 @@ import {
   getVariantCascade,
 } from '../database.js'
 import { initializeOpencodeForDirectory } from '../opencode.js'
-import { resolveTextChannel, getKimakiMetadata } from '../discord-utils.js'
+import { resolveTextChannel, getOttoMetadata } from '../discord-utils.js'
 import {
   getCurrentModelInfo,
   ensureSessionPreferencesSnapshot,
@@ -120,13 +120,13 @@ export async function handleModelVariantCommand({
       resolveTextChannel(thread),
       getThreadSession(thread.id),
     ])
-    const metadata = await getKimakiMetadata(textChannel)
+    const metadata = await getOttoMetadata(textChannel)
     projectDirectory = metadata.projectDirectory
     targetChannelId = textChannel?.id || channel.id
     sessionId = threadSessionId
   } else if (channel.type === ChannelType.GuildText) {
     const textChannel = channel as TextChannel
-    const metadata = await getKimakiMetadata(textChannel)
+    const metadata = await getOttoMetadata(textChannel)
     projectDirectory = metadata.projectDirectory
     targetChannelId = channel.id
   } else {

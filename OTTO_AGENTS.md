@@ -16,7 +16,7 @@ after making important changes to queueing or message handling always run the fu
 
 # repo architecture
 
-kimaki is a monorepo with three main packages that communicate via a shared Postgres database hosted on PlanetScale.
+otto is a monorepo with three main packages that communicate via a shared Postgres database hosted on PlanetScale.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -24,7 +24,7 @@ kimaki is a monorepo with three main packages that communicate via a shared Post
 │  cli/ (TypeScript CLI + Discord bot)                        │
 │  ├── src/cli.ts        main CLI, onboarding wizard          │
 │  ├── src/discord-bot.ts  event loop, session routing        │
-│  └── SQLite (~/.kimaki/discord-sessions.db)                 │
+│  └── SQLite (~/.otto/discord-sessions.db)                   │
 │         local state: bot tokens, channels, threads, models  │
 └────────┬──────────────────────────┬─────────────────────────┘
          │ REST + WebSocket         │ polls /api/onboarding/status
@@ -56,7 +56,7 @@ kimaki is a monorepo with three main packages that communicate via a shared Post
 │  db/schema.prisma                                            │
 │                                                              │
 │  gateway_clients table:                                      │
-│    client_id  TEXT   ── identifies the kimaki user            │
+│    client_id  TEXT   ── identifies the otto user              │
 │    secret     TEXT   ── authenticates gateway connections     │
 │    guild_id   TEXT   ── guild the user installed the bot in   │
 │    @@id([client_id, guild_id])                               │
@@ -107,7 +107,7 @@ the gateway mode onboarding (in `cli/src/cli.ts`, the `run()` function) works as
 1. CLI generates `clientId` (UUID) + `clientSecret` (32-byte hex)
 2. builds Discord OAuth URL with `state=JSON({clientId, clientSecret})` and `redirect_uri=https://kimaki.dev/api/auth/callback/discord`
 3. opens browser to the Discord install URL
-4. user authorizes the shared Kimaki bot in their server
+4. user authorizes the shared Otto bot in their server
 5. Discord redirects to `website/src/routes/oauth-callback.tsx` with `guild_id` + `state` — website upserts `gateway_clients` row in Postgres
 6. CLI polls `website/src/routes/onboarding-status.ts` every 2s until it finds the `client_id` + `secret` row, gets back `guild_id`
 7. CLI stores credentials locally via `setBotMode()` in SQLite with `bot_mode='gateway'`, `proxy_url` pointing to the gateway
@@ -155,28 +155,28 @@ ONLY restart the discord bot if the user explicitly asks for it.
 
 To restart the discord bot process so it uses the new code, send a SIGUSR2 signal to it.
 
-1. Find the process ID (PID) of the kimaki discord bot (e.g., using `ps aux | grep kimaki` or searching for "kimaki" in process list).
+1. Find the process ID (PID) of the otto discord bot (e.g., using `ps aux | grep otto` or searching for "otto" in process list).
 2. Send the signal: `kill -SIGUSR2 <PID>`
 
 The bot will wait 1000ms and then restart itself with the same arguments.
 
-## running parallel kimaki processes
+## running parallel otto processes
 
-if you need to run another kimaki process while one is already running (for example testing the npm-installed kimaki), ALWAYS set a different `KIMAKI_LOCK_PORT` for the extra process.
+if you need to run another otto process while one is already running (for example testing the npm-installed otto), ALWAYS set a different `OTTO_LOCK_PORT` for the extra process.
 
-otherwise the new process can take over the lock port, stop the main kimaki process, and kill active sessions.
+otherwise the new process can take over the lock port, stop the main otto process, and kill active sessions.
 
 use a free port and a separate data dir, for example:
 
 ```bash
-KIMAKI_LOCK_PORT=31001 npx -y kimaki@latest --data-dir ~/.kimaki-test
+OTTO_LOCK_PORT=31001 npx -y otto@latest --data-dir ~/.otto-test
 ```
 
-> KIMAKI_LOCK_PORT is required only for the root kimaki command, which is the one that starts the kimaki bot. subcommands dont' need it.
+> OTTO_LOCK_PORT is required only for the root otto command, which is the one that starts the otto bot. subcommands dont' need it.
 
 ## sqlite
 
-this project uses sqlite to preserve state between runs. the database should never have breaking changes, new kimaki versions should keep working with old sqlite databases created by an older kimaki version. if this happens specifically ask the user how to proceed, asking if it is ok adding migration in startup so users with existing db can still use kimaki and will not break.
+this project uses sqlite to preserve state between runs. the database should never have breaking changes, new otto versions should keep working with old sqlite databases created by an older otto version. if this happens specifically ask the user how to proceed, asking if it is ok adding migration in startup so users with existing db can still use otto and will not break.
 
 you should prefer never deleting or adding new fields. we rely in a schema.sql generated inside src to initialize an update the database schema for users.
 
@@ -316,13 +316,13 @@ important limits and rules to keep in mind:
 - `Action Row` can contain up to **5 buttons** or a single select menu
 - `Container` can hold `Action Row`, `Text Display`, `Section`, `Media Gallery`, `Separator`, and `File`
 
-for kimaki table rendering specifically: plain rows should stay as a single `TextDisplay`, and rows with actions should usually render as `TextDisplay` + `ActionRow` inside the `Container` instead of using `Section` for the whole row.
+for otto table rendering specifically: plain rows should stay as a single `TextDisplay`, and rows with actions should usually render as `TextDisplay` + `ActionRow` inside the `Container` instead of using `Section` for the whole row.
 
 ## heap snapshots and memory debugging
 
-kimaki has a built-in heap monitor that runs every 30s and checks V8 heap usage.
+otto has a built-in heap monitor that runs every 30s and checks V8 heap usage.
 
-- **85% heap used**: writes a `.heapsnapshot` file to `~/.kimaki/heap-snapshots/`
+- **85% heap used**: writes a `.heapsnapshot` file to `~/.otto/heap-snapshots/`
 
 to manually trigger a heap snapshot at any time:
 
@@ -330,7 +330,7 @@ to manually trigger a heap snapshot at any time:
 kill -SIGUSR1 <PID>
 ```
 
-snapshots are saved as `heap-<date>-<sizeMB>MB.heapsnapshot` in `~/.kimaki/heap-snapshots/`.
+snapshots are saved as `heap-<date>-<sizeMB>MB.heapsnapshot` in `~/.otto/heap-snapshots/`.
 open them in Chrome DevTools (Memory tab > Load) to inspect what is holding memory.
 there is a 5 minute cooldown between automatic snapshots to avoid disk spam.
 
@@ -373,15 +373,15 @@ always try to use logger instead of console. so logs in the cli look uniform and
 
 for the log prefixes always use short names
 
-kimaki writes logs to `<dataDir>/kimaki.log` (default `~/.kimaki/kimaki.log`). the log file is reset on every bot startup, so it only contains logs from the current run. file logging works in all environments (dev and production).
+otto writes logs to `<dataDir>/otto.log` (default `~/.otto/otto.log`). the log file is reset on every bot startup, so it only contains logs from the current run. file logging works in all environments (dev and production).
 
 to debug opencode event ordering, set `KIMAKI_LOG_OPENCODE_SESSION_EVENTS=1`. this writes jsonl files under `<dataDir>/opencode-session-events/` (one file per session id, like `ses_xxx.jsonl`). use `KIMAKI_OPENCODE_SESSION_EVENTS_DIR` to override the output directory.
 
-For example when running a test to debug events: `KIMAKI_OPENCODE_SESSION_EVENTS_DIR=./tmp/kimaki-test-3423 KIMAKI_LOG_OPENCODE_SESSION_EVENTS=1 pnpm test test-file.test.ts -t test-name`
+For example when running a test to debug events: `KIMAKI_OPENCODE_SESSION_EVENTS_DIR=./tmp/otto-test-3423 KIMAKI_LOG_OPENCODE_SESSION_EVENTS=1 pnpm test test-file.test.ts -t test-name`
 
 for live user-session debugging (without restarting with env vars), export the persisted session event buffer from sqlite with:
 
-`kimaki session export-events-jsonl --session <session_id> --out ./tmp/session-events.jsonl`
+`otto session export-events-jsonl --session <session_id> --out ./tmp/session-events.jsonl`
 
 use this when debugging session-state regressions (for example footer appearing after abort). the exported jsonl can be copied into `cli/src/session-handler/event-stream-fixtures/` and used to add/update `event-stream-state.test.ts` coverage for pure derivation helpers.
 
@@ -403,28 +403,28 @@ use `jq` to inspect these files quickly:
 
 ```bash
 # list event type counts for one session file
-jq -r '.event.type' ~/.kimaki/opencode-session-events/ses_xxx.jsonl | sort | uniq -c
+jq -r '.event.type' ~/.otto/opencode-session-events/ses_xxx.jsonl | sort | uniq -c
 
 # show only session lifecycle events (status/idle/error)
-jq -r 'select(.event.type=="session.status" or .event.type=="session.idle" or .event.type=="session.error") | [.timestamp, .event.type, (.event.properties.status.type // ""), (.event.properties.error.name // "")] | @tsv' ~/.kimaki/opencode-session-events/ses_xxx.jsonl
+jq -r 'select(.event.type=="session.status" or .event.type=="session.idle" or .event.type=="session.error") | [.timestamp, .event.type, (.event.properties.status.type // ""), (.event.properties.error.name // "")] | @tsv' ~/.otto/opencode-session-events/ses_xxx.jsonl
 
 # filter by a specific event type (example: message.part.updated)
-jq -r 'select(.event.type=="message.part.updated")' ~/.kimaki/opencode-session-events/ses_xxx.jsonl
+jq -r 'select(.event.type=="message.part.updated")' ~/.otto/opencode-session-events/ses_xxx.jsonl
 
 # filter by event subtype (example: session.status idle)
-jq -r 'select(.event.type=="session.status" and .event.properties.status.type=="idle")' ~/.kimaki/opencode-session-events/ses_xxx.jsonl
+jq -r 'select(.event.type=="session.status" and .event.properties.status.type=="idle")' ~/.otto/opencode-session-events/ses_xxx.jsonl
 
 # show timestamps + event types
-jq -r '[.timestamp, .event.type] | @tsv' ~/.kimaki/opencode-session-events/ses_xxx.jsonl
+jq -r '[.timestamp, .event.type] | @tsv' ~/.otto/opencode-session-events/ses_xxx.jsonl
 ```
 
 for checkout validation requests, prefer non-recursive checks unless the user asks otherwise.
 
 ## opencode plugin and env vars
 
-the opencode plugin (`cli/src/kimaki-opencode-plugin.ts`) runs inside the **opencode server process**, not the kimaki bot process. this means `config.ts` state (like `getDataDir()`, etc.) is not available there.
+the opencode plugin (`cli/src/otto-opencode-plugin.ts`) runs inside the **opencode server process**, not the otto bot process. this means `config.ts` state (like `getDataDir()`, etc.) is not available there.
 
-**CRITICAL: never export utility functions from `kimaki-opencode-plugin.ts`.** opencode's plugin loader calls every exported function in the module as a plugin initializer. if you export a helper like `condenseMemoryMd(content: string)`, it will be called with a PluginInput object instead of a string and crash. only the plugin entrypoint function should be exported. move any utilities to separate files (e.g. `condense-memory.ts`) and import them.
+**CRITICAL: never export utility functions from `otto-opencode-plugin.ts`.** opencode's plugin loader calls every exported function in the module as a plugin initializer. if you export a helper like `condenseMemoryMd(content: string)`, it will be called with a PluginInput object instead of a string and crash. only the plugin entrypoint function should be exported. move any utilities to separate files (e.g. `condense-memory.ts`) and import them.
 
 we should architecture our opencode plugins as many separate plugins to make them readable and easy to understand. every export will be interpreted as a different plugin.
 
@@ -433,21 +433,21 @@ to pass bot-process state to the plugin, use `KIMAKI_*` env vars set in `opencod
 - `KIMAKI_DATA_DIR`: data directory path
 - `KIMAKI_LOCK_PORT`: lock server port for bot communication
 
-the plugin does NOT receive `KIMAKI_BOT_TOKEN`. discord REST operations (user listing, thread archiving) are handled by CLI commands (`kimaki user list`, `kimaki session archive`) which resolve credentials from the database via `resolveBotCredentials()`. this avoids leaking gateway credentials into child process environments.
+the plugin does NOT receive `KIMAKI_BOT_TOKEN`. discord REST operations (user listing, thread archiving) are handled by CLI commands (`otto user list`, `otto session archive`) which resolve credentials from the database via `resolveBotCredentials()`. this avoids leaking gateway credentials into child process environments.
 
 when adding new bot-side config that the plugin needs, add it as a `KIMAKI_*` env var in `opencode.ts` spawn env and read `process.env.KIMAKI_*` in the plugin. never import config.ts getters in the plugin.
 
 **NEVER use `console.log`, `console.error`, or any `console.*` in plugin code.** opencode captures plugin stdout/stderr and it pollutes the opencode server output, breaking structured logging. plugins must be silent — fail gracefully and return null/undefined on errors instead of logging.
 
-OpenCode plugin files must also avoid importing `cli/src/logger.ts`. That logger pulls in `@clack/prompts` / `picocolors`, which can fail under the plugin loader's ESM/CJS interop. For plugin code, use a separate plugin-safe logger module that only appends to the kimaki log file and never writes to stdout/stderr.
+OpenCode plugin files must also avoid importing `cli/src/logger.ts`. That logger pulls in `@clack/prompts` / `picocolors`, which can fail under the plugin loader's ESM/CJS interop. For plugin code, use a separate plugin-safe logger module that only appends to the otto log file and never writes to stdout/stderr.
 
 ## skills folder
 
-skills lives at the repository root in `skills/`. build and publish scripts copy it into `cli/skills/` so the npm package still ships the bundled skills. some skills are synced from github repos. see cli/scripts/sync-skills.ts. so never manually update synced copies. instead if need to update them start kimaki threads on those project, found via kimaki cli.
+skills lives at the repository root in `skills/`. build and publish scripts copy it into `cli/skills/` so the npm package still ships the bundled skills. some skills are synced from github repos. see cli/scripts/sync-skills.ts. so never manually update synced copies. instead if need to update them start otto threads on those project, found via otto cli.
 
 ## discord-digital-twin e2e style
 
-when writing discord e2e tests, prefer adding reusable automation methods to `DigitalDiscord` instead of creating per-test helper functions in kimaki.
+when writing discord e2e tests, prefer adding reusable automation methods to `DigitalDiscord` instead of creating per-test helper functions in otto.
 
 always import from `discord-digital-twin/src` so we dont need to compile that package before using it.
 
@@ -456,7 +456,7 @@ aim for a playwright-like style in tests:
 - actor methods for actions: `discord.user(userId).sendMessage(...)`, `runSlashCommand(...)`, `clickButton(...)`, etc
 - separate wait methods for assertions: `discord.waitForThread(...)`, `discord.waitForBotReply(...)`, `discord.waitForInteractionAck(...)`
 
-if a kimaki test needs a new interaction primitive, first add it to `discord-digital-twin/src/index.ts` and cover it in `discord-digital-twin/tests/*` so future tests can reuse it.
+if an otto test needs a new interaction primitive, first add it to `discord-digital-twin/src/index.ts` and cover it in `discord-digital-twin/tests/*` so future tests can reuse it.
 
 always add `expect(await th.text()).toMatchInlineSnapshot()` (or `discord.channel(id).text()` / `discord.thread(id).text()`) in every test that creates or modifies messages. place it **before** other expects so it updates even when a test fails. this gives both agents and humans a quick textual snapshot of what happened in Discord during the test, making failures easy to diagnose. use deterministic message content (no `Date.now()` or random values) so snapshots stay stable across runs. for tests that don't create messages (metadata, typing, guild routes), the snapshot can be skipped.
 
@@ -471,7 +471,7 @@ see `docs/e2e-testing-learnings.md` for detailed lessons. key points:
 - prefer `latestUserTextIncludes` over `rawPromptIncludes` for deterministic matcher markers that should only trigger once. `rawPromptIncludes` scans full session history, so after abort+retry in the same session the old marker re-fires and causes deadlocks or timeouts. `latestUserTextIncludes` only checks the most recent user message.
 - prefer content-aware polling ("does this user message have a bot reply after it?") over count-based polling (`waitForBotMessageCount`). count-based is fragile when sessions get interrupted/aborted because error messages satisfy the count early.
 - bot replies can be error messages, not just LLM content. verify ordering by position, not content matching.
-- test logs are suppressed by default (`KIMAKI_VITEST=1` in vitest.config.ts). to debug a failing test, rerun with `KIMAKI_TEST_LOGS=1` to see all kimaki logger output in the terminal. example: `KIMAKI_TEST_LOGS=1 pnpm test --run src/thread-message-queue.e2e.test.ts`. only run one test at a time with logs enabled to see clear logs and save context window.
+- test logs are suppressed by default (`OTTO_VITEST=1` in vitest.config.ts). to debug a failing test, rerun with `OTTO_TEST_LOGS=1` to see all otto logger output in the terminal. example: `OTTO_TEST_LOGS=1 pnpm test --run src/thread-message-queue.e2e.test.ts`. only run one test at a time with logs enabled to see clear logs and save context window.
 - if total duration of an e2e test file exceeds **~10 seconds**, split into a new file so vitest parallelizes across files.
 - `afterAll` should clean up opencode sessions via `session.list()` + `session.delete()` to avoid accumulation across runs.
 - to assert something doesn't appear in Discord (e.g. no footer after abort), poll `th.getMessages()` in a loop: sleep 20ms, max 10 iterations. everything is deterministic so 200ms total is enough. fail immediately if the unwanted message appears.
@@ -497,7 +497,7 @@ why this is preferred:
 - easier testing: derivation logic is pure and deterministic with fixture inputs.
 - fewer race bugs: state is derived from observed events, not guessed from local transitions.
 
-when the user mentions a specific kimaki session while reporting a bug, always export its jsonl first with `kimaki session export-events-jsonl --session <id> --out ./tmp/<id>.jsonl` and inspect that stream before guessing about runtime state.
+when the user mentions a specific otto session while reporting a bug, always export its jsonl first with `otto session export-events-jsonl --session <id> --out ./tmp/<id>.jsonl` and inspect that stream before guessing about runtime state.
 
 write derivation as pure functions that accept events and return computed state.
 prefer existing derivation helpers from `event-stream-state.ts` (for example
@@ -554,13 +554,13 @@ sometimes we need to interrupt the opencode session and restart it. for example 
 1. call `session.abort` sdk method to abort current session.
 2. call `session.promptAsync({ parts: [] })` to resume session
 
-## how kimaki messages look like in Discord
+## how otto messages look like in Discord
 
-Kimaki works by creating threads on the first user message. The bot will then reply messages there for text parts, prefixing them with ⬥
+Otto works by creating threads on the first user message. The bot will then reply messages there for text parts, prefixing them with ⬥
 
 tool parts are also displayed in Discord as messages, either prefixed with ┣ or ◼︎ for file edits or writes. we also display context usage info like percentage of context used at 10% windows, prefixed with ⬦. the tool calls displayed depend on the verbosity parameter. the default skips tool parts for parts like `thinking`, file reads and non `sideEffect` bash parts (sideEffect is a param passed by the model).
 
-at assistant message normal completion we also display a footer message like `kimakivoice ⋅ main ⋅ 2m 30s ⋅ 71% ⋅ claude-opus-4-6`. with folder, branch, time, context used, model id. we should not show this message on interruptions or aborts.
+at assistant message normal completion we also display a footer message like `project ⋅ main ⋅ 2m 30s ⋅ 71% ⋅ claude-opus-4-6`. with folder, branch, time, context used, model id. we should not show this message on interruptions or aborts.
 
 we also support voice user messages, these are transcribed with another model and sent with prefix `Transcribed message:`, shown by the bot.
 
@@ -574,7 +574,7 @@ discord.js has a startTyping method. this method will show a typing indicator in
 
 ## discord-slack-bridge
 
-`discord-slack-bridge/` is a package that lets discord.js bots (like kimaki)
+`discord-slack-bridge/` is a package that lets discord.js bots (like otto)
 control a Slack workspace without code changes. it translates Discord REST
 calls to Slack Web API calls and Slack webhook events to Discord Gateway
 dispatches. see `slop/discord-slack-bridge-spec.md` for the full spec.

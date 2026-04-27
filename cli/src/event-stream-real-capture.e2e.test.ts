@@ -574,7 +574,7 @@ describe('real event stream capture fixtures (cached provider)', () => {
     async () => {
       const beforeFiles = getSessionLogState()
       const prompt =
-        'REAL_FIXTURE_ACTION_BUTTONS. First response MUST call tool `kimaki_action_buttons` with {"buttons":[{"label":"Approve capture","color":"green"}]}. Do not send text before the tool call. After user clicks, reply exactly: action-buttons-done.'
+        'REAL_FIXTURE_ACTION_BUTTONS. First response MUST call tool `otto_action_buttons` with {"buttons":[{"label":"Approve capture","color":"green"}]}. Do not send text before the tool call. After user clicks, reply exactly: action-buttons-done.'
 
       await discord.channel(TEXT_CHANNEL_ID).user(TEST_USER_ID).sendMessage({
         content: prompt,
@@ -622,7 +622,7 @@ describe('real event stream capture fixtures (cached provider)', () => {
         beforeFiles,
         assertEvents: (events) => {
           expect(events.length).toBeGreaterThan(0)
-          const hasActionTool = hasToolEvent({ events, tool: 'kimaki_action_buttons' })
+          const hasActionTool = hasToolEvent({ events, tool: 'otto_action_buttons' })
           expect(hasActionTool).toBe(true)
         },
       })

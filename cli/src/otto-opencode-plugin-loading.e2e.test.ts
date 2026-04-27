@@ -48,7 +48,7 @@ test(
     const stderrLines: string[] = []
     const isolatedOpencodeRoot = path.join(projectDir, 'opencode-test-home')
     const xdgDirectories = {
-      OPENCODE_CONFIG_DIR: path.join(isolatedOpencodeRoot, '.opencode-kimaki'),
+      OPENCODE_CONFIG_DIR: path.join(isolatedOpencodeRoot, '.opencode-otto'),
       XDG_CONFIG_HOME: path.join(isolatedOpencodeRoot, '.config'),
       XDG_DATA_HOME: path.join(isolatedOpencodeRoot, '.local', 'share'),
       XDG_CACHE_HOME: path.join(isolatedOpencodeRoot, '.cache'),

@@ -57,15 +57,16 @@ export function createDiscordRest(token: string): REST {
 }
 
 /**
- * Returns the internet-reachable base URL for this kimaki instance.
- * When KIMAKI_INTERNET_REACHABLE_URL is set (e.g. "https://my-kimaki.fly.dev"),
- * kimaki binds the hrana server to 0.0.0.0 and exposes a /kimaki/wake endpoint
- * so the gateway-proxy can wake this instance. Discord traffic still flows
- * through the normal path (gateway-proxy in gateway mode, direct in self-hosted).
- * Returns null when not set (kimaki only reachable on localhost).
+ * Returns the internet-reachable base URL for this otto instance.
+ * When OTTO_INTERNET_REACHABLE_URL (or the legacy KIMAKI_INTERNET_REACHABLE_URL)
+ * is set (e.g. "https://my-otto.fly.dev"), otto binds the hrana server to
+ * 0.0.0.0 and exposes a /kimaki/wake endpoint so the gateway-proxy can wake
+ * this instance. Discord traffic still flows through the normal path
+ * (gateway-proxy in gateway mode, direct in self-hosted).
+ * Returns null when not set (otto only reachable on localhost).
  */
 export function getInternetReachableBaseUrl(): string | null {
-  return process.env['KIMAKI_INTERNET_REACHABLE_URL'] || null
+  return process.env['OTTO_INTERNET_REACHABLE_URL'] || process.env['KIMAKI_INTERNET_REACHABLE_URL'] || null
 }
 
 /**

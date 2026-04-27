@@ -15,7 +15,7 @@ import {
 } from '../database.js'
 import { getPrisma } from '../db.js'
 import { initializeOpencodeForDirectory } from '../opencode.js'
-import { resolveTextChannel, getKimakiMetadata } from '../discord-utils.js'
+import { resolveTextChannel, getOttoMetadata } from '../discord-utils.js'
 import { getRuntime } from '../session-handler/thread-session-runtime.js'
 import { getCurrentModelInfo } from './model.js'
 import { createLogger, LogPrefix } from '../logger.js'
@@ -79,13 +79,13 @@ export async function handleUnsetModelCommand({
   if (isThread) {
     const thread = channel as ThreadChannel
     const textChannel = await resolveTextChannel(thread)
-    const metadata = await getKimakiMetadata(textChannel)
+    const metadata = await getOttoMetadata(textChannel)
     projectDirectory = metadata.projectDirectory
     targetChannelId = textChannel?.id || channel.id
     sessionId = await getThreadSession(thread.id)
   } else if (channel.type === ChannelType.GuildText) {
     const textChannel = channel as TextChannel
-    const metadata = await getKimakiMetadata(textChannel)
+    const metadata = await getOttoMetadata(textChannel)
     projectDirectory = metadata.projectDirectory
     targetChannelId = channel.id
   } else {

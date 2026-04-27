@@ -120,11 +120,11 @@ describe('worktrees', () => {
 
       await git({
         cwd: submoduleLocal,
-        args: ['config', 'user.email', 'kimaki-tests@example.com'],
+        args: ['config', 'user.email', 'otto-tests@example.com'],
       })
       await git({
         cwd: submoduleLocal,
-        args: ['config', 'user.name', 'Kimaki Tests'],
+        args: ['config', 'user.name', 'Otto Tests'],
       })
 
       fs.writeFileSync(path.join(submoduleLocal, 'README.md'), 'v1\n', 'utf-8')
@@ -135,11 +135,11 @@ describe('worktrees', () => {
       await git({ cwd: parentRepo, args: ['init', '-b', 'main'] })
       await git({
         cwd: parentRepo,
-        args: ['config', 'user.email', 'kimaki-tests@example.com'],
+        args: ['config', 'user.email', 'otto-tests@example.com'],
       })
       await git({
         cwd: parentRepo,
-        args: ['config', 'user.name', 'Kimaki Tests'],
+        args: ['config', 'user.name', 'Otto Tests'],
       })
       await git({
         cwd: parentRepo,
@@ -241,11 +241,11 @@ describe('worktrees', () => {
 
       await git({
         cwd: parentLocal,
-        args: ['config', 'user.email', 'kimaki-tests@example.com'],
+        args: ['config', 'user.email', 'otto-tests@example.com'],
       })
       await git({
         cwd: parentLocal,
-        args: ['config', 'user.name', 'Kimaki Tests'],
+        args: ['config', 'user.name', 'Otto Tests'],
       })
 
       fs.writeFileSync(path.join(parentLocal, 'README.md'), 'v1\n', 'utf-8')
@@ -329,18 +329,18 @@ describe('worktrees', () => {
   test('formatWorktreeName keeps user-provided slugs verbatim', () => {
     expect(
       formatWorktreeName('Configurable sidebar width by component'),
-    ).toMatchInlineSnapshot(`"opencode/kimaki-configurable-sidebar-width-by-component"`)
-    expect(formatWorktreeName('my-feature')).toMatchInlineSnapshot(`"opencode/kimaki-my-feature"`)
+    ).toMatchInlineSnapshot(`"opencode/otto-configurable-sidebar-width-by-component"`)
+    expect(formatWorktreeName('my-feature')).toMatchInlineSnapshot(`"opencode/otto-my-feature"`)
   })
 
   test('formatAutoWorktreeName compresses long auto-derived slugs', () => {
     expect(
       formatAutoWorktreeName('Configurable sidebar width by component'),
-    ).toMatchInlineSnapshot(`"opencode/kimaki-cnfgrbl-sdbr-wdth-by-cmpnnt"`)
-    expect(formatAutoWorktreeName('my-feature')).toMatchInlineSnapshot(`"opencode/kimaki-my-feature"`)
+    ).toMatchInlineSnapshot(`"opencode/otto-cnfgrbl-sdbr-wdth-by-cmpnnt"`)
+    expect(formatAutoWorktreeName('my-feature')).toMatchInlineSnapshot(`"opencode/otto-my-feature"`)
   })
 
-  test('getManagedWorktreeDirectory writes under kimaki data dir and strips prefix', () => {
+  test('getManagedWorktreeDirectory writes under otto data dir and strips prefix', () => {
     const sandbox = createTestRoot()
     try {
       setDataDir(sandbox)

@@ -393,8 +393,8 @@ async function runTranscriptionOnce({
       ...(provider === 'openai'
         ? {
             openai: {
-              safetyIdentifier: 'kimaki:voice-transcription',
-              user: 'kimaki:voice-transcription',
+              safetyIdentifier: 'otto:voice-transcription',
+              user: 'otto:voice-transcription',
             },
           }
         : {}),

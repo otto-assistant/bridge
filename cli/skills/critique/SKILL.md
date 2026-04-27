@@ -10,7 +10,7 @@ description: >
 
 Git diff viewer that renders diffs as **web pages**, **images**, and **PDFs** with syntax highlighting.
 
-Agents running in headless environments (kimaki on Discord, openclaw on Slack/Telegram) have no terminal to show diffs. critique uploads diffs to critique.work and returns a shareable URL you can paste into chat. Users click the link and see a syntax-highlighted split-view diff with mobile support and dark/light mode — no install needed.
+Agents running in headless environments (otto on Discord, openclaw on Slack/Telegram) have no terminal to show diffs. critique uploads diffs to critique.work and returns a shareable URL you can paste into chat. Users click the link and see a syntax-highlighted split-view diff with mobile support and dark/light mode — no install needed.
 
 **Always run `critique --help` first** to see the latest flags and commands. The help output is the source of truth.
 

@@ -654,7 +654,7 @@ When the user references another project by name, run \`otto project list\` to f
 otto project list
 otto project list --json  # machine-readable output
 
-# Create a new project in ~/.kimaki/projects/<name> (folder + git init + Discord channel)
+# Create a new project in ~/.otto/projects/<name> (folder + git init + Discord channel)
 otto project create my-new-app
 
 # Add an existing directory as a project

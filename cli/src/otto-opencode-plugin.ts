@@ -1,4 +1,4 @@
-// OpenCode plugin entry point for Kimaki Discord bot.
+// OpenCode plugin entry point for Otto Discord bot.
 // Each export is treated as a separate plugin by OpenCode's plugin loader.
 // CRITICAL: never export utility functions from this file — only plugin
 // initializer functions. OpenCode calls every export as a plugin.

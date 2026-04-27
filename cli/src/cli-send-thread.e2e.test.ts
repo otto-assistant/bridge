@@ -1,4 +1,4 @@
-// E2e test for `kimaki send --channel` flow.
+// E2e test for `otto send --channel` flow.
 // Reproduces the race condition where the bot's MessageCreate GuildText handler
 // tries to call startThread() on the same message that the CLI already created
 // a thread for via REST, causing DiscordAPIError[160004].
@@ -135,7 +135,7 @@ function createDeterministicMatchers(): DeterministicMatcher[] {
   return [userReplyMatcher, catchAll]
 }
 
-describe('kimaki send --channel thread creation', () => {
+describe('otto send --channel thread creation', () => {
   let directories: ReturnType<typeof createRunDirectories>
   let discord: DigitalDiscord
   let botClient: Client
@@ -162,7 +162,7 @@ describe('kimaki send --channel thread creation', () => {
       guild: {
         name: 'CLI Send E2E Guild',
         // Use bot as guild owner so bot-authored messages pass
-        // hasKimakiBotPermission (owner check). This matches production where
+        // hasOttoBotPermission (owner check). This matches production where
         // the bot typically has admin or is the app owner. Without this, the
         // MessageCreate handler drops bot messages before reaching the GuildText
         // path, hiding the race condition we're testing.

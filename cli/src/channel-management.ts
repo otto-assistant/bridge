@@ -36,9 +36,9 @@ export async function ensureOttoCategory(
   const isOttoBot = botName?.toLowerCase() === 'otto'
   const categoryName = botName && !isOttoBot ? `${CATEGORY_NAME} ${botName}` : CATEGORY_NAME
   // Legacy names to check when looking up existing categories on older servers
-  const isKimakiBot = botName?.toLowerCase() === 'kimaki'
+  const isLegacyKimakiBot = botName?.toLowerCase() === 'kimaki'
   const legacyCategoryName =
-    botName && !isKimakiBot ? `${LEGACY_CATEGORY_NAME} ${botName}` : LEGACY_CATEGORY_NAME
+    botName && !isLegacyKimakiBot ? `${LEGACY_CATEGORY_NAME} ${botName}` : LEGACY_CATEGORY_NAME
 
   const existingCategory = guild.channels.cache.find(
     (channel): channel is CategoryChannel => {
@@ -74,9 +74,9 @@ export async function ensureOttoAudioCategory(
   const isOttoBot = botName?.toLowerCase() === 'otto'
   const categoryName =
     botName && !isOttoBot ? `${CATEGORY_NAME_AUDIO} ${botName}` : CATEGORY_NAME_AUDIO
-  const isKimakiBot = botName?.toLowerCase() === 'kimaki'
+  const isLegacyKimakiBot = botName?.toLowerCase() === 'kimaki'
   const legacyCategoryName =
-    botName && !isKimakiBot
+    botName && !isLegacyKimakiBot
       ? `${LEGACY_CATEGORY_NAME_AUDIO} ${botName}`
       : LEGACY_CATEGORY_NAME_AUDIO
 
@@ -172,7 +172,7 @@ export type ChannelWithTags = {
   id: string
   name: string
   description: string | null
-  kimakiDirectory?: string
+  ottoDirectory?: string
 }
 
 export async function getChannelsWithDescriptions(
@@ -195,7 +195,7 @@ export async function getChannelsWithDescriptions(
       id: textChannel.id,
       name: textChannel.name,
       description,
-      kimakiDirectory: channelConfig?.directory,
+      ottoDirectory: channelConfig?.directory,
     })
   }
 

@@ -168,7 +168,7 @@ function getExternalUserMirrorText({
 // Pure derivation: is the latest user turn from Discord?
 // Checks the newest user message with renderable text for a <discord-user />
 // synthetic part. If present, the session is currently driven from Discord
-// (kimaki manages it) and external sync should skip it. If absent (CLI/TUI),
+// (otto manages it) and external sync should skip it. If absent (CLI/TUI),
 // external sync should mirror it — this naturally handles the "reclaim" case
 // (external → discord → external) without any DB source toggling.
 function isLatestUserTurnFromDiscord({

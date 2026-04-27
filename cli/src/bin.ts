@@ -1,4 +1,4 @@
-// Respawn wrapper for the kimaki bot process.
+// Respawn wrapper for the otto bot process.
 // When running the default command (no subcommand) with --auto-restart,
 // spawns cli.js as a child process and restarts it on non-zero exit codes
 // (crash, OOM kill, etc). Intentional exits (code 0 or EXIT_NO_RESTART=64)
@@ -7,7 +7,7 @@
 // Subcommands (send, tunnel, project, etc.) run directly without the wrapper
 // since they are short-lived and don't need crash recovery.
 //
-// When __KIMAKI_CHILD is set, we're the child process -- just run cli.js directly.
+// When __OTTO_CHILD is set, we're the child process -- just run cli.js directly.
 //
 // V8 heap snapshot flags:
 // Injects --heapsnapshot-near-heap-limit=3 and --diagnostic-dir so V8 writes
@@ -21,7 +21,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const HEAP_SNAPSHOT_DIR = path.join(os.homedir(), '.kimaki', 'heap-snapshots')
+const HEAP_SNAPSHOT_DIR = path.join(os.homedir(), '.otto', 'heap-snapshots')
 
 // First arg after node + script is either a subcommand or a flag.
 // If it doesn't start with '-', it's a subcommand (e.g. "send", "tunnel", "project").
@@ -29,7 +29,7 @@ const firstArg = process.argv[2]
 const isSubcommand = firstArg && !firstArg.startsWith('-')
 const isHelpFlag = process.argv.includes('--help')
 
-if (process.env.__KIMAKI_CHILD || isSubcommand || isHelpFlag) {
+if (process.env.__OTTO_CHILD || isSubcommand || isHelpFlag) {
   await import('./cli.js')
 } else {
   console.error('no subcommand detected. otto will automatically restart on crash')
@@ -58,7 +58,7 @@ if (process.env.__KIMAKI_CHILD || isSubcommand || isHelpFlag) {
       args,
       {
         stdio: 'inherit',
-        env: { ...process.env, __KIMAKI_CHILD: '1' },
+        env: { ...process.env, __OTTO_CHILD: '1' },
       },
     )
 

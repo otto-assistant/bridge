@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add `--no-message` flag to `kimaki send` that creates a Discord thread where the agent's response is the first visible message — no starter message, no attachment.
+**Goal:** Add `--no-message` flag to `otto send` that creates a Discord thread where the agent's response is the first visible message — no starter message, no attachment.
 
 **Architecture:** CLI creates thread with invisible starter message, calls opencode SDK directly (session.create + session.promptAsync), registers thread↔session in DB, signals bot via IPC to start event listener. Bot picks up IPC, creates runtime, streams agent response.
 
@@ -452,7 +452,7 @@ sudo npm install -g /data/projects/bridge/cli --prefix /usr
 **Step 2: Test --no-message with --user**
 
 ```bash
-kimaki send --channel 1489141474737262643 --no-message --user "SerhiiD" --name "No message test" --prompt "Напиши 'test OK' і все."
+otto send --channel 1489141474737262643 --no-message --user "SerhiiD" --name "No message test" --prompt "Напиши 'test OK' і все."
 ```
 
 Expected:
@@ -464,10 +464,10 @@ Expected:
 **Step 3: Test incompatible flag combinations**
 
 ```bash
-kimaki send --channel 1489141474737262643 --no-message --notify-only -p "test"
+otto send --channel 1489141474737262643 --no-message --notify-only -p "test"
 # Expected: error "Cannot use --no-message with --notify-only"
 
-kimaki send --channel 1489141474737262643 --no-message --wait -p "test"
+otto send --channel 1489141474737262643 --no-message --wait -p "test"
 # Expected: error "Cannot use --no-message with --wait"
 ```
 

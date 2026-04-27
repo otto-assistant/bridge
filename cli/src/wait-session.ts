@@ -1,5 +1,5 @@
 // Wait utilities for polling session completion.
-// Used by `kimaki send --wait` to block until a session finishes,
+// Used by `otto send --wait` to block until a session finishes,
 // then output the session markdown to stdout.
 
 import { getThreadSession } from './database.js'
@@ -10,7 +10,7 @@ import { createLogger, LogPrefix } from './logger.js'
 const waitLogger = createLogger(LogPrefix.SESSION)
 
 /**
- * Poll the kimaki database until a session ID appears for the given thread.
+ * Poll the otto database until a session ID appears for the given thread.
  * The bot writes this mapping in session-handler.ts:551 when it picks up
  * the thread and creates/reuses a session.
  */

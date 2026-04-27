@@ -32,7 +32,7 @@ import {
   initializeOpencodeForDirectory,
   getOpencodeServerPort,
 } from '../opencode.js'
-import { resolveTextChannel, getKimakiMetadata } from '../discord-utils.js'
+import { resolveTextChannel, getOttoMetadata } from '../discord-utils.js'
 import { createLogger, LogPrefix } from '../logger.js'
 import { buildPaginatedOptions, parsePaginationValue } from './paginated-select.js'
 
@@ -232,12 +232,12 @@ export async function handleLoginCommand({
   if (isThread) {
     const thread = channel as ThreadChannel
     const textChannel = await resolveTextChannel(thread)
-    const metadata = await getKimakiMetadata(textChannel)
+    const metadata = await getOttoMetadata(textChannel)
     projectDirectory = metadata.projectDirectory
     targetChannelId = textChannel?.id || channel.id
   } else if (channel.type === ChannelType.GuildText) {
     const textChannel = channel as TextChannel
-    const metadata = await getKimakiMetadata(textChannel)
+    const metadata = await getOttoMetadata(textChannel)
     projectDirectory = metadata.projectDirectory
     targetChannelId = channel.id
   } else {

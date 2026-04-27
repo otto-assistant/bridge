@@ -115,7 +115,7 @@ export function generateDiscordInstallUrlForBot({
   // This initiates the better-auth OAuth flow with clientId/clientSecret
   // as additionalData, which better-auth stores in its verification table
   // and recovers after Discord redirects back to the callback.
-  // Use a kimaki-specific callback field name to avoid ambiguity with
+  // Use an otto-specific callback field name to avoid ambiguity with
   // better-auth's own callbackURL state field.
   const url = new URL(`${KIMAKI_WEBSITE_URL}/discord-install`)
   url.searchParams.set('clientId', clientId)

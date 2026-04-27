@@ -118,7 +118,7 @@ async function executeThreadScheduledTask({
     }
 
     const projectDirectory =
-      task.project_directory || `/home/ubuntu/.kimaki/projects/general`;
+      task.project_directory || `/home/ubuntu/.otto/projects/general`;
 
     const prevCleanup = process.env.KIMAKI_SKIP_OPENCODE_PROCESS_CLEANUP;
     process.env.KIMAKI_SKIP_OPENCODE_PROCESS_CLEANUP = "1";
@@ -275,7 +275,7 @@ async function executeChannelScheduledTask({
     }
 
     const projectDirectory =
-      task.project_directory || `/home/ubuntu/.kimaki/projects/general`;
+      task.project_directory || `/home/ubuntu/.otto/projects/general`;
 
     // 2. Prevent CLI exit from killing the opencode server we are about to start
     const prevCleanup = process.env.KIMAKI_SKIP_OPENCODE_PROCESS_CLEANUP;

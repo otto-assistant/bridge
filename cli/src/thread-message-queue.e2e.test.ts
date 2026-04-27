@@ -720,7 +720,7 @@ e2eTest('thread message queue ordering', () => {
       expect(followupUserIndex).toBeGreaterThan(-1)
       expect(textPartAfterFollowupIndex).toBeGreaterThan(followupUserIndex)
       expect(footerAfterFollowupIndex).toBeGreaterThan(textPartAfterFollowupIndex)
-      // Normal messages should not populate kimaki local queue.
+      // Normal messages should not populate otto local queue.
       const noLocalQueueState = await waitForThreadState({
         threadId: thread.id,
         predicate: (state) => {

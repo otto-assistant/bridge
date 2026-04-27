@@ -6,12 +6,12 @@
 
 ## Problem
 
-When `kimaki send` creates a new thread, it posts a **starter message** containing the prompt text (or `» **Scheduled task**` with `--silent-prompt` + `prompt.md` attachment). The user wants the agent's response to be the **first visible message** in the thread — no starter message, no attachment.
+When `otto send` creates a new thread, it posts a **starter message** containing the prompt text (or `» **Scheduled task**` with `--silent-prompt` + `prompt.md` attachment). The user wants the agent's response to be the **first visible message** in the thread — no starter message, no attachment.
 
 ## Current Flow
 
 ```
-kimaki send → posts Discord message (with embed marker)
+otto send → posts Discord message (with embed marker)
            → creates thread from message
            → bot ThreadCreate handler picks up
            → parses embed marker → enqueueIncoming()
@@ -24,7 +24,7 @@ The CLI **never calls opencode SDK** — it only posts Discord messages and reli
 ## Proposed Flow
 
 ```
-kimaki send --no-message --channel <id> "prompt"
+otto send --no-message --channel <id> "prompt"
 │
 ├─ 1. CLI creates Discord thread (starter message = "\u200B", suppress embeds)
 │

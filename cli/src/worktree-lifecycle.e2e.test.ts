@@ -254,7 +254,7 @@ describe('worktree lifecycle', () => {
     }
     // Clean up the git worktree created during the test
     if (directories) {
-      const worktreeBranch = `opencode/kimaki-${WORKTREE_NAME}`
+      const worktreeBranch = `opencode/otto-${WORKTREE_NAME}`
       await execAsync(
         `git worktree list --porcelain`,
         { cwd: directories.projectDirectory },
@@ -275,7 +275,7 @@ describe('worktree lifecycle', () => {
         }
       }).catch(() => { return })
       await execAsync(
-        `git branch -D ${JSON.stringify(`opencode/kimaki-${WORKTREE_NAME}`)}`,
+        `git branch -D ${JSON.stringify(`opencode/otto-${WORKTREE_NAME}`)}`,
         { cwd: directories.projectDirectory },
       ).catch(() => { return })
       fs.rmSync(directories.dataDir, { recursive: true, force: true })
@@ -373,7 +373,7 @@ describe('worktree lifecycle', () => {
 
       // sdkDirectory should now point to the worktree path
       expect(runtimeAfter!.sdkDirectory).not.toBe(directories.projectDirectory)
-      // Folder name drops the `opencode-kimaki-` prefix (branch name keeps it).
+      // Folder name drops the `opencode-otto-` prefix (branch name keeps it).
       // See getManagedWorktreeDirectory in worktrees.ts.
       expect(runtimeAfter!.sdkDirectory).toContain(WORKTREE_NAME)
       expect(runtimeAfter!.sdkDirectory).toContain(

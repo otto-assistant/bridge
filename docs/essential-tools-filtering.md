@@ -221,7 +221,7 @@ The `/verbosity` command allows users to set channel-level verbosity:
 Can also be set globally via CLI flag at startup:
 
 ```bash
-kimaki --verbosity text-and-essential-tools
+otto --verbosity text-and-essential-tools
 ```
 
 ## Summary

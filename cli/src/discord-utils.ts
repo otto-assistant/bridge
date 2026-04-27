@@ -642,7 +642,7 @@ export function escapeDiscordFormatting(text: string): string {
   return text.replace(/```/g, '\\`\\`\\`').replace(/````/g, '\\`\\`\\`\\`')
 }
 
-export async function getKimakiMetadata(
+export async function getOttoMetadata(
   textChannel: TextChannel | null,
 ): Promise<{
   projectDirectory?: string
@@ -661,6 +661,9 @@ export async function getKimakiMetadata(
     projectDirectory: channelConfig.directory,
   }
 }
+
+// Legacy alias kept for backward compat
+export const getKimakiMetadata = getOttoMetadata
 
 /**
  * Resolve project directory from an autocomplete interaction.
@@ -742,7 +745,7 @@ export async function resolveWorkingDirectory({
     ? await resolveTextChannel(channel as ThreadChannel)
     : (channel as TextChannel)
 
-  const metadata = await getKimakiMetadata(textChannel)
+  const metadata = await getOttoMetadata(textChannel)
   if (!metadata.projectDirectory) {
     return undefined
   }

@@ -4,7 +4,7 @@
 //
 // Protocol logic is implemented in the `libsqlproxy` package.
 // This file handles: server lifecycle, single-instance enforcement,
-// auth, and kimaki-specific endpoints (/kimaki/wake, /health).
+// auth, and otto-specific endpoints (/kimaki/wake, /health).
 //
 // Hrana v2 protocol spec ("Hrana over HTTP"):
 //   https://github.com/tursodatabase/libsql/blob/main/docs/HTTP_V2_SPEC.md
@@ -71,7 +71,7 @@ function getRequestAuthToken(req: http.IncomingMessage): string | null {
 }
 
 // Timing-safe comparison to prevent timing attacks when the hrana server
-// is internet-facing (bindAll=true / KIMAKI_INTERNET_REACHABLE_URL set).
+// is internet-facing (bindAll=true / OTTO_INTERNET_REACHABLE_URL set).
 function isAuthorizedRequest(req: http.IncomingMessage): boolean {
   const expectedToken = store.getState().gatewayToken
   if (!expectedToken) {
@@ -119,7 +119,7 @@ export async function startHranaServer({
   bindAll = false,
 }: {
   dbPath: string
-  /** Bind to 0.0.0.0 instead of 127.0.0.1. Set when KIMAKI_INTERNET_REACHABLE_URL is defined. */
+  /** Bind to 0.0.0.0 instead of 127.0.0.1. Set when OTTO_INTERNET_REACHABLE_URL is defined. */
   bindAll?: boolean
 }) {
   if (server && db && hranaUrl) return hranaUrl
@@ -145,7 +145,7 @@ export async function startHranaServer({
   const hranaFetchHandler = createLibsqlHandler(libsqlExecutor(database))
   const hranaNodeHandler = createLibsqlNodeHandler(hranaFetchHandler)
 
-  // Combined handler: kimaki-specific endpoints + hrana protocol
+  // Combined handler: otto-specific endpoints + hrana protocol
   const handler: http.RequestListener = async (req, res) => {
     const pathname = new URL(req.url || '/', 'http://localhost').pathname
     if (pathname === '/kimaki/wake') {
@@ -245,7 +245,7 @@ export async function stopHranaServer() {
 // ── Single-instance enforcement ──────────────────────────────────────
 
 /**
- * Evict a previous kimaki instance on the lock port.
+ * Evict a previous otto instance on the lock port.
  * Fetches /health to get the running process PID, then kills it directly.
  * No lsof/netstat/spawnSync needed — the PID comes from the health response.
  */
@@ -266,14 +266,14 @@ export async function evictExistingInstance({ port }: { port: number }) {
   if (!targetPid || targetPid === process.pid) return
 
   hranaLogger.log(
-    `Evicting existing kimaki process (PID: ${targetPid}) on port ${port}`,
+    `Evicting existing otto process (PID: ${targetPid}) on port ${port}`,
   )
   const killResult = errore.try({
     try: () => {
       process.kill(targetPid, 'SIGTERM')
     },
     catch: (e) =>
-      new Error('Failed to send SIGTERM to existing kimaki process', {
+      new Error('Failed to send SIGTERM to existing otto process', {
         cause: e,
       }),
   })

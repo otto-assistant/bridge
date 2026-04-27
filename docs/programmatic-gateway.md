@@ -1,31 +1,31 @@
 <!--
-title: Starting Kimaki Programmatically (Gateway Mode)
+title: Starting Otto Programmatically (Gateway Mode)
 description: |
-  How to spawn kimaki as a child process in gateway mode, parse structured
+  How to spawn otto as a child process in gateway mode, parse structured
   SSE events from stdout, and integrate it into a cloud hosting platform
-  that provisions kimaki instances for end users.
+  that provisions otto instances for end users.
 prompt: |
-  Create a doc explaining how to start kimaki programmatically in --gateway
-  mode for the use case of offering kimaki as a cloud service. Cover the
+  Create a doc explaining how to start otto programmatically in --gateway
+  mode for the use case of offering otto as a cloud service. Cover the
   SSE event protocol, eventsource-parser usage, the full event lifecycle,
    and custom callback URLs. Reference cli/src/cli.ts ProgrammaticEvent
    type and cli/scripts/test-gateway-programmatic.ts for the working
   example.
 -->
 
-# Starting Kimaki Programmatically (Gateway Mode)
+# Starting Otto Programmatically (Gateway Mode)
 
-When kimaki runs in a non-TTY environment (piped stdout, no terminal), it emits
+When otto runs in a non-TTY environment (piped stdout, no terminal), it emits
 structured events on stdout using the SSE (Server-Sent Events) wire format.
 This lets a host process parse lifecycle events reliably even when other log
 lines, warnings, and debug output are interleaved on the same stream.
 
 ## Use case
 
-You are building a cloud platform that provisions kimaki instances for users.
-Each user gets their own kimaki process running on a VPS. Your platform needs to:
+You are building a cloud platform that provisions otto instances for users.
+Each user gets their own otto process running on a VPS. Your platform needs to:
 
-1. Start kimaki for a new user
+1. Start otto for a new user
 2. Get the Discord install URL to show in your web UI
 3. Know when the user has authorized the bot
 4. Know when the bot is fully ready and listening for messages
@@ -33,7 +33,7 @@ Each user gets their own kimaki process running on a VPS. Your platform needs to
 
 ## Event lifecycle
 
-When kimaki starts in gateway mode with piped stdout, it emits these events
+When otto starts in gateway mode with piped stdout, it emits these events
 in order:
 
 ```
@@ -77,7 +77,7 @@ Parse events from the child process stdout:
 import { spawn } from 'node:child_process'
 import { createParser } from 'eventsource-parser'
 
-const child = spawn('kimaki', [
+const child = spawn('otto', [
   '--gateway',
   '--restart-onboarding',
   '--data-dir', '/data/user-abc',
@@ -85,8 +85,8 @@ const child = spawn('kimaki', [
 ], {
   env: {
     ...process.env,
-    // Unique port per instance to avoid conflicts between concurrent kimaki processes
-    KIMAKI_LOCK_PORT: '31200',
+    // Unique port per instance to avoid conflicts between concurrent otto processes
+    OTTO_LOCK_PORT: '31200',
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -130,10 +130,10 @@ child.stdout.on('data', (chunk) => {
 
 | Flag | Required | Description |
 |---|---|---|
-| `--gateway` | yes | Use the shared Kimaki gateway bot |
+| `--gateway` | yes | Use the shared Otto gateway bot |
 | `--restart-onboarding` | for fresh setup | Force the onboarding flow even if saved credentials exist |
 | `--data-dir <path>` | recommended | Isolated data directory per user instance |
-| `--gateway-callback-url <url>` | optional | Redirect user here after OAuth instead of default kimaki page |
+| `--gateway-callback-url <url>` | optional | Redirect user here after OAuth instead of default otto page |
 
 ## Custom callback URL
 
@@ -142,7 +142,7 @@ authorize the bot. The callback URL receives a `?guild_id=<id>` query parameter
 so your platform knows which guild was authorized.
 
 ```bash
-kimaki --gateway --gateway-callback-url https://your-platform.com/setup-done
+otto --gateway --gateway-callback-url https://your-platform.com/setup-done
 ```
 
 The install URL emitted in the `install_url` event will include the callback:
@@ -151,19 +151,19 @@ The install URL emitted in the `install_url` event will include the callback:
 https://kimaki.dev/discord-install?clientId=...&callbackUrl=https%3A%2F%2Fyour-platform.com%2Fsetup-done
 ```
 
-After the user authorizes, Discord redirects to kimaki's OAuth handler, which
+After the user authorizes, Discord redirects to Otto's OAuth handler, which
 then redirects to your callback URL with `?guild_id=<id>` appended.
 
 ## Running multiple instances
 
-Each kimaki process needs a unique `KIMAKI_LOCK_PORT` to avoid conflicts.
+Each otto process needs a unique `OTTO_LOCK_PORT` to avoid conflicts.
 Without it, a new process will kill the existing one.
 
 ```typescript
 const lockPort = 31100 + userIndex
 
-const child = spawn('kimaki', ['--gateway', '--data-dir', userDataDir], {
-  env: { ...process.env, KIMAKI_LOCK_PORT: String(lockPort) },
+const child = spawn('otto', ['--gateway', '--data-dir', userDataDir], {
+  env: { ...process.env, OTTO_LOCK_PORT: String(lockPort) },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 ```
@@ -173,7 +173,7 @@ credentials are isolated.
 
 ## Why SSE format instead of plain JSON lines
 
-Process stdout is noisy. Kimaki logs, clack prompts, OpenCode server output,
+Process stdout is noisy. Otto logs, clack prompts, OpenCode server output,
 and debug messages all go to stdout. Parsing JSON by checking if a line starts
 with `{` is fragile — a log line could start with `{` by coincidence.
 

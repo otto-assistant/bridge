@@ -1,6 +1,6 @@
 ---
 title: CI & Automation
-description: Start Kimaki sessions from CI pipelines, cron jobs, or any automation. Includes GitHub Actions examples, scheduled tasks, and per-session permissions.
+description: Start Otto sessions from CI pipelines, cron jobs, or any automation. Includes GitHub Actions examples, scheduled tasks, and per-session permissions.
 ---
 
 # CI & Automation
@@ -13,12 +13,12 @@ The `send` command creates a Discord thread with your prompt, and the running bo
 
 | Variable | Required | Description |
 |---|---|---|
-| `KIMAKI_BOT_TOKEN` | Yes (in CI) | Discord bot token |
+| `OTTO_BOT_TOKEN` | Yes (in CI) | Discord bot token |
 
 ### CLI Options
 
 ```bash
-npx -y kimaki send \
+npx -y otto send \
   --channel <channel-id>    # Required: Discord channel ID
   --prompt <prompt>         # Required: Message content
   --name <name>             # Optional: Thread name (defaults to prompt preview)
@@ -34,7 +34,7 @@ Use either `--channel/--project` (create new thread) or `--thread/--session` (se
 
 ### Example: GitHub Actions on New Issues
 
-This workflow starts a Kimaki session whenever a new issue is opened:
+This workflow starts an Otto session whenever a new issue is opened:
 
 ```yaml
 # .github/workflows/investigate-issues.yml
@@ -48,11 +48,11 @@ jobs:
   investigate:
     runs-on: ubuntu-latest
     steps:
-      - name: Start Kimaki Session
+      - name: Start Otto Session
         env:
-          KIMAKI_BOT_TOKEN: ${{ secrets.KIMAKI_BOT_TOKEN }}
+          OTTO_BOT_TOKEN: ${{ secrets.OTTO_BOT_TOKEN }}
         run: |
-          npx -y kimaki send \
+          npx -y otto send \
             --channel "1234567890123456789" \
             --prompt "Investigate issue ${{ github.event.issue.html_url }} using gh cli. Try fixing it in a new worktree ./${{ github.event.issue.number }}" \
             --name "Issue #${{ github.event.issue.number }}"
@@ -60,9 +60,9 @@ jobs:
 
 **Setup:**
 
-1. Add `KIMAKI_BOT_TOKEN` to your repository secrets (Settings > Secrets > Actions)
+1. Add `OTTO_BOT_TOKEN` to your repository secrets (Settings > Secrets > Actions)
 2. Replace `1234567890123456789` with your Discord channel ID (right-click channel > Copy Channel ID)
-3. Make sure the Kimaki bot is running on your machine
+3. Make sure the Otto bot is running on your machine
 
 ### How It Works
 
@@ -79,16 +79,16 @@ Create Discord channels for a project directory without starting a session:
 
 ```bash
 # Add current directory as a project
-npx -y kimaki project add
+npx -y otto project add
 
 # Add a specific directory
-npx -y kimaki project add /path/to/project
+npx -y otto project add /path/to/project
 
 # Specify guild when bot is in multiple servers
-npx -y kimaki project add ./myproject --guild 123456789
+npx -y otto project add ./myproject --guild 123456789
 
 # In CI with env var for bot token
-KIMAKI_BOT_TOKEN=xxx npx -y kimaki project add --app-id 987654321
+OTTO_BOT_TOKEN=xxx npx -y otto project add --app-id 987654321
 ```
 
 | Option | Description |
@@ -99,47 +99,47 @@ KIMAKI_BOT_TOKEN=xxx npx -y kimaki project add --app-id 987654321
 
 ## Scheduled Tasks
 
-Add `--send-at` to any `kimaki send` command to schedule it for later. Supports one-time ISO dates (must be UTC ending with `Z`) and recurring cron expressions:
+Add `--send-at` to any `otto send` command to schedule it for later. Supports one-time ISO dates (must be UTC ending with `Z`) and recurring cron expressions:
 
 ```bash
 # One-time: run at a specific UTC time
-kimaki send --channel <channel-id> --prompt "Review open PRs" \
+otto send --channel <channel-id> --prompt "Review open PRs" \
   --send-at "2026-03-01T09:00:00Z"
 
 # Recurring: every Monday at 9am UTC
-kimaki send --channel <channel-id> \
+otto send --channel <channel-id> \
   --prompt "Run weekly test suite and summarize failures" \
   --send-at "0 9 * * 1"
 
 # Schedule a reminder into an existing thread
-kimaki send --session <session-id> \
+otto send --session <session-id> \
   --prompt "Reminder: <@user-id> check back on this thread" \
   --send-at "2026-03-01T15:00:00Z" --notify-only
 ```
 
 All other `send` flags (`--notify-only`, `--worktree`, `--agent`, `--model`, `--user`) work with `--send-at`. The only exception is `--wait`, which is incompatible since the task runs in the future.
 
-Manage scheduled tasks with `kimaki task list` and `kimaki task delete <id>`.
+Manage scheduled tasks with `otto task list` and `otto task delete <id>`.
 
 ## Per-Session Permissions
 
-When starting sessions with `kimaki send`, you can restrict tools for that specific session using `--permission`. Useful for CI pipelines, scheduled tasks, or spawning sandboxed sessions.
+When starting sessions with `otto send`, you can restrict tools for that specific session using `--permission`. Useful for CI pipelines, scheduled tasks, or spawning sandboxed sessions.
 
 Format: `tool:action` or `tool:pattern:action`. Actions: `allow`, `deny`, `ask`.
 
 ```bash
 # Read-only session (no edits, no bash)
-kimaki send -c 123 -p "Review this code" \
+otto send -c 123 -p "Review this code" \
   --permission "bash:deny" \
   --permission "edit:deny"
 
 # Only allow git commands
-kimaki send -c 123 -p "Check git history" \
+otto send -c 123 -p "Check git history" \
   --permission "bash:git *:allow" \
   --permission "bash:*:deny"
 
 # Deny everything except reading
-kimaki send -c 123 -p "Analyze the codebase" \
+otto send -c 123 -p "Analyze the codebase" \
   --permission "*:deny" \
   --permission "read:allow" \
   --permission "glob:allow" \

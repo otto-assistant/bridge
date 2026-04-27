@@ -771,7 +771,7 @@ async function startSingleServer({
 
   // Write config to a file instead of passing via OPENCODE_CONFIG_CONTENT env var.
   // OPENCODE_CONFIG (file path) is loaded before project config in opencode's
-  // priority chain, so project-level opencode.json can override kimaki defaults.
+  // priority chain, so project-level opencode.json can override otto defaults.
   // OPENCODE_CONFIG_CONTENT was loaded last and overrode user project configs,
   // causing issue #90 (project permissions not being respected).
   const isDev = import.meta.url.endsWith('.ts') || import.meta.url.endsWith('.tsx')
@@ -979,7 +979,7 @@ async function startSingleServer({
   opencodeLogger.log(`Server ready on port ${port}`)
 
   // Always dump startup logs so plugin loading errors and other startup output
-  // are visible in kimaki.log.
+  // are visible in otto.log.
   for (const line of logBuffer) {
     opencodeLogger.log(line)
   }
@@ -1173,8 +1173,9 @@ export function buildSessionPermissions({
   // permission prompts.
   rules.push(...homeDirectoryRules({ relativePath: '.opensrc' }))
 
-  // Allow ~/.kimaki so the agent can access kimaki data dir (logs, db, etc.)
+  // Allow ~/.otto (and legacy ~/.kimaki) so the agent can access otto data dir (logs, db, etc.)
   // without permission prompts.
+  rules.push(...homeDirectoryRules({ relativePath: '.otto' }))
   rules.push(...homeDirectoryRules({ relativePath: '.kimaki' }))
 
   // Allow opencode tool output artifacts under XDG data so agents can inspect
@@ -1352,7 +1353,7 @@ export function removeInjectionGuardConfig({ sessionId }: { sessionId: string })
 }
 
 /**
- * Read per-session injection guard config. Used by the kimaki plugin
+ * Read per-session injection guard config. Used by the otto plugin
  * inside the opencode server process.
  */
 export function readInjectionGuardConfig({ sessionId }: { sessionId: string }): { scanPatterns: string[] } | null {

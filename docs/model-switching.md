@@ -6,7 +6,7 @@ description: |
 
 ## Why agents are faster than /model
 
-The `/model` command requires clicking through 3-4 dropdown menus every time you want to switch. With agent files you define a model + variant + permissions once, restart kimaki, and from then on you can switch with a single `/sonnet-high-agent` command. No menus, instant.
+The `/model` command requires clicking through 3-4 dropdown menus every time you want to switch. With agent files you define a model + variant + permissions once, restart otto, and from then on you can switch with a single `/sonnet-high-agent` command. No menus, instant.
 
 This is especially useful when you regularly switch between models during a session, for example using a cheap model for boilerplate and a powerful one for architecture decisions.
 
@@ -163,7 +163,7 @@ Why this is the most reliable approach:
 
 ### Activating
 
-After creating or editing agent files, restart kimaki so it picks up the new slash commands. Then switch with:
+After creating or editing agent files, restart otto so it picks up the new slash commands. Then switch with:
 
 - `/agent` dropdown to pick from all available agents
 - `/<name>-agent` slash command for instant one-step switching (e.g. `/sonnet-high-agent`, `/opus-max-agent`, `/gpt5-agent`)

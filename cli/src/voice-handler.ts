@@ -39,7 +39,7 @@ import {
   escapeDiscordFormatting,
   SILENT_MESSAGE_FLAGS,
   NOTIFY_MESSAGE_FLAGS,
-  hasKimakiBotPermission,
+  hasOttoBotPermission,
 } from './discord-utils.js'
 import { transcribeAudio, type TranscriptionResult } from './voice.js'
 import { FetchError } from './errors.js'
@@ -697,7 +697,7 @@ export function registerVoiceStateHandler({
         const member = newState.member || oldState.member
         if (!member) return
 
-        if (!hasKimakiBotPermission(member)) {
+        if (!hasOttoBotPermission(member)) {
           return
         }
 
@@ -722,7 +722,7 @@ export function registerVoiceStateHandler({
               if (m.id === member.id || m.user.bot) {
                 return false
               }
-              return hasKimakiBotPermission(m)
+              return hasOttoBotPermission(m)
             })
 
             if (!hasOtherPermittedUsers) {
@@ -763,7 +763,7 @@ export function registerVoiceStateHandler({
                   if (m.id === member.id || m.user.bot) {
                     return false
                   }
-                  return hasKimakiBotPermission(m)
+                  return hasOttoBotPermission(m)
                 },
               )
 

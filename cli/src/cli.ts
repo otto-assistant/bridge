@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Main CLI entrypoint for the Kimaki Discord bot.
+// Main CLI entrypoint for the Otto Discord bot.
 // Handles interactive setup, Discord OAuth, slash command registration,
 // project channel creation, and launching the bot with opencode integration.
 import { goke } from 'goke'
@@ -33,9 +33,9 @@ import {
   getChannelDirectory,
   startDiscordBot,
   initializeOpencodeForDirectory,
-  ensureKimakiCategory,
+  ensureOttoCategory,
   createProjectChannels,
-  createDefaultKimakiChannel,
+  createDefaultOttoChannel,
   type ChannelWithTags,
 } from './discord-bot.js'
 import {
@@ -152,7 +152,7 @@ const KIMAKI_GATEWAY_PROXY_REST_BASE_URL = getGatewayProxyRestBaseUrl({
 
 // Strip bracketed paste escape sequences from terminal input.
 // iTerm2 and other terminals wrap pasted content with \x1b[200~ and \x1b[201~
-// which can cause validation to fail on macOS. See: https://github.com/remorses/kimaki/issues/18
+// which can cause validation to fail on macOS. See: https://github.com/remorses/otto/issues/18
 function stripBracketedPaste(value: string | undefined): string {
   if (!value) {
     return ''
@@ -644,7 +644,7 @@ async function ensureCommandAvailable({
 // Run opencode upgrade in the background so the user always has the latest version.
 
 // Spawn caffeinate on macOS to prevent system sleep while bot is running.
-// Uses -w to watch the parent PID so caffeinate self-terminates if kimaki
+// Uses -w to watch the parent PID so caffeinate self-terminates if otto
 // exits for any reason (SIGTERM, crash, process.exit, supervisor stop).
 function startCaffeinate() {
   if (process.platform !== 'darwin') {
@@ -695,7 +695,7 @@ type CliOptions = {
 import { store } from './store.js'
 import { registerCommands, SKIP_USER_COMMANDS } from './discord-command-registration.js'
 
-async function collectKimakiChannels({
+async function collectOttoChannels({
   guilds,
 }: {
   guilds: Guild[]
@@ -703,9 +703,9 @@ async function collectKimakiChannels({
   const guildResults = await Promise.all(
     guilds.map(async (guild) => {
       const channels = await getChannelsWithDescriptions(guild)
-      const kimakiChans = channels.filter((ch) => ch.kimakiDirectory)
+      const ottoChans = channels.filter((ch) => ch.ottoDirectory)
 
-      return { guild, channels: kimakiChans }
+      return { guild, channels: ottoChans }
     }),
   )
 
@@ -719,16 +719,16 @@ async function collectKimakiChannels({
  * Called after Discord login to persist channel configurations.
  */
 async function storeChannelDirectories({
-  kimakiChannels,
+  ottoChannels,
 }: {
-  kimakiChannels: { guild: Guild; channels: ChannelWithTags[] }[]
+  ottoChannels: { guild: Guild; channels: ChannelWithTags[] }[]
 }): Promise<void> {
-  for (const { guild, channels } of kimakiChannels) {
+  for (const { guild, channels } of ottoChannels) {
     for (const channel of channels) {
-      if (channel.kimakiDirectory) {
+      if (channel.ottoDirectory) {
         await setChannelDirectory({
           channelId: channel.id,
-          directory: channel.kimakiDirectory,
+          directory: channel.ottoDirectory,
           channelType: 'text',
           skipIfExists: true,
         })
@@ -741,7 +741,7 @@ async function storeChannelDirectories({
         if (voiceChannel) {
           await setChannelDirectory({
             channelId: voiceChannel.id,
-            directory: channel.kimakiDirectory,
+            directory: channel.ottoDirectory,
             channelType: 'voice',
             skipIfExists: true,
           })
@@ -756,10 +756,10 @@ async function storeChannelDirectories({
  * Called at the end of startup to display available channels.
  */
 function showReadyMessage({
-  kimakiChannels,
+  ottoChannels,
   createdChannels,
 }: {
-  kimakiChannels: { guild: Guild; channels: ChannelWithTags[] }[]
+  ottoChannels: { guild: Guild; channels: ChannelWithTags[] }[]
   createdChannels: { name: string; id: string; guildId: string }[]
 }): void {
   const allChannels: {
@@ -771,13 +771,13 @@ function showReadyMessage({
 
   allChannels.push(...createdChannels)
 
-  kimakiChannels.forEach(({ guild, channels }) => {
+  ottoChannels.forEach(({ guild, channels }) => {
     channels.forEach((ch) => {
       allChannels.push({
         name: ch.name,
         id: ch.id,
         guildId: guild.id,
-        directory: ch.kimakiDirectory,
+        directory: ch.ottoDirectory,
       })
     })
   })
@@ -803,7 +803,7 @@ function showReadyMessage({
 }
 
 /**
- * Create the default kimaki channel in each guild and send a welcome message.
+ * Create the default otto channel in each guild and send a welcome message.
  * Idempotent: skips guilds that already have the channel.
  * Extracted so both the interactive and headless startup paths share the same logic.
  */
@@ -823,7 +823,7 @@ async function ensureDefaultChannelsWithWelcome({
   const created: { name: string; id: string; guildId: string }[] = []
   for (const guild of guilds) {
     try {
-      const result = await createDefaultKimakiChannel({
+      const result = await createDefaultOttoChannel({
         guild,
         botName: discordClient.user?.username,
         appId,
@@ -846,7 +846,7 @@ async function ensureDefaultChannelsWithWelcome({
       }
     } catch (error) {
       cliLogger.warn(
-        `Failed to create default kimaki channel in ${guild.name}: ${error instanceof Error ? error.stack : String(error)}`,
+        `Failed to create default otto channel in ${guild.name}: ${error instanceof Error ? error.stack : String(error)}`,
       )
     }
   }
@@ -1025,12 +1025,12 @@ async function resolveCredentials({
     : await (async () => {
         const choice = await select({
           message:
-            'How do you want to connect to Discord?\n\nGateway: uses Kimaki\'s pre-built bot — no setup, instant. Self-hosted: you create your own Discord bot at discord.com/developers.',
+            'How do you want to connect to Discord?\n\nGateway: uses Otto\'s pre-built bot — no setup, instant. Self-hosted: you create your own Discord bot at discord.com/developers.',
           options: [
             {
               value: 'gateway' as const,
               disabled: true,
-              label: 'Gateway (pre-built Kimaki bot, currently disabled because of Discord verification process. will be re-enabled soon)',
+              label: 'Gateway (pre-built Otto bot, currently disabled because of Discord verification process. will be re-enabled soon)',
             },
             {
               value: 'self_hosted' as const,
@@ -1076,7 +1076,7 @@ async function resolveCredentials({
 
     if (isInteractive) {
       note(
-        `Open this URL to install the Kimaki bot in your Discord server:\n\n${oauthUrl}\n\nDo not share this URL with anyone — it contains your credentials.\n\nIf you don't have a server, create one first (+ button in the Discord sidebar).`,
+        `Open this URL to install the Otto bot in your Discord server:\n\n${oauthUrl}\n\nDo not share this URL with anyone — it contains your credentials.\n\nIf you don't have a server, create one first (+ button in the Discord sidebar).`,
         'Install Bot',
       )
 
@@ -1331,7 +1331,7 @@ async function run({
     preferredGatewayToken: isGatewayMode ? token : undefined,
   })
   // Always set service auth token so local and internet control-plane paths
-  // share one auth model (/kimaki/wake and future service endpoints).
+  // share one auth model (/kimaki/wake and future service endpoints). (/kimaki/wake is kept as infrastructure endpoint)
   store.setState({ gatewayToken })
 
   // In gateway mode, ensure REST calls route through the gateway proxy.
@@ -1344,7 +1344,7 @@ async function run({
     store.setState({ discordBaseUrl: KIMAKI_GATEWAY_PROXY_REST_BASE_URL })
   }
 
-  // When KIMAKI_INTERNET_REACHABLE_URL is set, the hrana server exposes
+  // When OTTO_INTERNET_REACHABLE_URL is set, the hrana server exposes
   // a /kimaki/wake endpoint for the gateway-proxy to wake this instance and
   // wait until discord.js is connected. Keep Discord traffic on the normal
   // configured base URL (gateway-proxy in gateway mode).
@@ -1415,7 +1415,7 @@ async function run({
   const discordClient = await createDiscordClient()
 
   const guilds: Guild[] = []
-  const kimakiChannels: { guild: Guild; channels: ChannelWithTags[] }[] = []
+  const ottoChannels: { guild: Guild; channels: ChannelWithTags[] }[] = []
   const createdChannels: { name: string; id: string; guildId: string }[] = []
 
   try {
@@ -1443,11 +1443,11 @@ async function run({
         }
 
         // Process guild metadata when setup flow needs channel prompts.
-        const guildResults = await collectKimakiChannels({ guilds })
+        const guildResults = await collectOttoChannels({ guilds })
 
         // Collect results
         for (const result of guildResults) {
-          kimakiChannels.push(result)
+          ottoChannels.push(result)
         }
 
         resolve(null)
@@ -1515,8 +1515,8 @@ async function run({
     // Never blocks ready state.
     void (async () => {
       try {
-        const backgroundChannels = await collectKimakiChannels({ guilds })
-        await storeChannelDirectories({ kimakiChannels: backgroundChannels })
+        const backgroundChannels = await collectOttoChannels({ guilds })
+        await storeChannelDirectories({ ottoChannels: backgroundChannels })
         cliLogger.log(
           `Background channel sync completed for ${backgroundChannels.length} guild(s)`,
         )
@@ -1527,7 +1527,7 @@ async function run({
         )
       }
 
-      // Create default kimaki channel + welcome message in each guild.
+      // Create default otto channel + welcome message in each guild.
       // Runs after channel sync so existing channels are detected correctly.
       try {
         await ensureDefaultChannelsWithWelcome({
@@ -1557,25 +1557,25 @@ async function run({
   } else {
     // ── Channel setup flow ──
     // Store channel-directory mappings discovered during Discord login.
-    await storeChannelDirectories({ kimakiChannels })
+    await storeChannelDirectories({ ottoChannels })
 
     if (!hasConfiguredTextChannels) {
       note(
-        'No Kimaki project channels are configured yet. Opening project/channel setup.',
+        'No Otto project channels are configured yet. Opening project/channel setup.',
         'Channel Setup',
       )
     }
 
-    if (kimakiChannels.length > 0) {
-      const channelList = kimakiChannels
+    if (ottoChannels.length > 0) {
+      const channelList = ottoChannels
         .flatMap(({ guild, channels }) =>
           channels.map((ch) => {
-            return `#${ch.name} in ${guild.name}: ${ch.kimakiDirectory}`
+            return `#${ch.name} in ${guild.name}: ${ch.ottoDirectory}`
           }),
         )
         .join('\n')
 
-      note(channelList, 'Existing Kimaki Channels')
+      note(channelList, 'Existing Otto Channels')
     }
 
     // Wait for OpenCode, fetch projects, show prompts, create channels if needed
@@ -1622,10 +1622,10 @@ async function run({
 
     cliLogger.log(`Found ${projects.length} OpenCode project(s)`)
 
-    const existingDirs = kimakiChannels.flatMap(({ channels }) =>
+    const existingDirs = ottoChannels.flatMap(({ channels }) =>
       channels
-        .filter((ch) => ch.kimakiDirectory)
-        .map((ch) => ch.kimakiDirectory)
+        .filter((ch) => ch.ottoDirectory)
+        .map((ch) => ch.ottoDirectory)
         .filter(Boolean),
     )
 
@@ -1732,7 +1732,7 @@ async function run({
       }
     }
 
-    // Create default kimaki channel for general-purpose tasks.
+    // Create default otto channel for general-purpose tasks.
     // Runs for every guild the bot is in, idempotent (skips if already exists).
     const defaultChannelResults = await ensureDefaultChannelsWithWelcome({
       guilds,
@@ -1790,13 +1790,13 @@ async function run({
       guild_ids: guilds.map((g) => { return g.id }),
     })
   } else {
-    showReadyMessage({ kimakiChannels, createdChannels })
+    showReadyMessage({ ottoChannels, createdChannels })
     outro('✨ Bot ready! Listening for messages...')
   }
 }
 
 cli
-  .command('', 'Set up and run the Kimaki Discord bot')
+  .command('', 'Set up and run the Otto Discord bot')
   .option('--restart-onboarding', 'Prompt for new credentials even if saved')
   .option(
     '--add-channels',
@@ -1838,7 +1838,7 @@ cli
   .option('--no-sentry', 'Disable Sentry error reporting')
   .option(
     '--gateway',
-    'Force gateway mode (use the gateway Kimaki bot instead of a self-hosted bot)',
+    'Force gateway mode (use the gateway Otto bot instead of a self-hosted bot)',
   )
   .option(
     '--gateway-callback-url <url>',
@@ -3464,7 +3464,7 @@ cli
 
       if (!appId) {
         cliLogger.error(
-          'App ID is required to create channels. Use --app-id or run `kimaki` first.',
+          'App ID is required to create channels. Use --app-id or run `otto` first.',
         )
         process.exit(EXIT_NO_RESTART)
       }
@@ -3720,7 +3720,7 @@ cli
 
     const botRow = await getBotTokenWithMode()
     if (!botRow) {
-      cliLogger.error('No bot configured. Run `kimaki` first.')
+      cliLogger.error('No bot configured. Run `otto` first.')
       process.exit(EXIT_NO_RESTART)
     }
 
@@ -3818,7 +3818,7 @@ cli
 
     const botRow = await getBotTokenWithMode()
     if (!botRow) {
-      cliLogger.error('No bot configured. Run `kimaki` first.')
+      cliLogger.error('No bot configured. Run `otto` first.')
       process.exit(EXIT_NO_RESTART)
     }
 
@@ -4036,7 +4036,7 @@ cli
 cli
   .command(
     'session list',
-    'List all OpenCode sessions, marking which were started via Kimaki',
+    'List all OpenCode sessions, marking which were started via Otto',
   )
   .option(
     '--project <path>',
@@ -4064,7 +4064,7 @@ cli
         process.exit(0)
       }
 
-      // Look up which sessions were started via kimaki (have a thread mapping)
+      // Look up which sessions were started via otto (have a thread mapping)
       const prisma = await getPrisma()
       const threadSessions = await prisma.thread_sessions.findMany({
         select: { thread_id: true, session_id: true },
@@ -4420,7 +4420,7 @@ cli
 cli
   .command(
     'session export-events-jsonl',
-    'Export persisted session events from SQLite to JSONL for debugging Kimaki runtime bugs',
+    'Export persisted session events from SQLite to JSONL for debugging Otto runtime bugs',
   )
   .option(
     '--session <sessionId>',
@@ -4428,7 +4428,7 @@ cli
   )
   .option(
     '--out <file>',
-    'Output .jsonl path (useful for reproducing Kimaki issues in event-stream-state tests)',
+    'Output .jsonl path (useful for reproducing Otto issues in event-stream-state tests)',
   )
   .action(async (options) => {
     const sessionId =

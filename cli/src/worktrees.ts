@@ -533,9 +533,9 @@ async function resolveDefaultWorktreeTarget(
 /**
  * Build the on-disk directory for a managed worktree.
  *
- * Layout: `<kimakiDataDir>/worktrees/<8charProjectHash>/<basename>`
+ * Layout: `<ottoDataDir>/worktrees/<8charProjectHash>/<basename>`
  *
- * - Lives under the kimaki data dir instead of the long
+ * - Lives under the otto data dir instead of the long
  *   `~/.local/share/opencode/worktree/<40-char-hash>/<name>` path so folder
  *   names stay short and readable (agents tend to give up and reuse the old
  *   worktree when paths get absurdly long).
@@ -559,7 +559,8 @@ export function getManagedWorktreeDirectory({
     .digest('hex')
     .slice(0, 8)
   const withoutPrefix = name
-    .replace(/^opencode\/kimaki-/, '')
+    .replace(/^opencode\/otto-/, '')
+    .replace(/^opencode\/kimaki-/, '') // backward compat for legacy branch names
     .replaceAll('/', '-')
   return path.join(getDataDir(), 'worktrees', projectHash, withoutPrefix)
 }
@@ -1267,7 +1268,7 @@ export async function validateWorktreeDirectory({
 }
 
 // Parsed entry from `git worktree list --porcelain`.
-// Represents any worktree (kimaki, opencode, manual) visible to git.
+// Represents any worktree (otto, opencode, manual) visible to git.
 export type GitWorktree = {
   directory: string
   branch: string | null // null for detached HEAD
@@ -1322,7 +1323,7 @@ export function parseGitWorktreeListPorcelain(
       continue
     }
     if (line.startsWith('branch ')) {
-      // "branch refs/heads/opencode/kimaki-foo" → "opencode/kimaki-foo"
+      // "branch refs/heads/opencode/kimaki-foo" → "opencode/kimaki-foo" (backward compat prefix)
       current.branch = line.slice('branch '.length).replace(/^refs\/heads\//, '')
       continue
     }

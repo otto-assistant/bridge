@@ -1,6 +1,6 @@
 // Heap memory monitor and snapshot writer.
 // Periodically checks V8 heap usage and writes gzip-compressed .heapsnapshot.gz
-// files to ~/.kimaki/heap-snapshots/ when memory usage is high.
+// files to ~/.otto/heap-snapshots/ when memory usage is high.
 // Also exposes writeHeapSnapshot() for on-demand snapshots via SIGUSR1.
 //
 // Snapshots use v8.getHeapSnapshot() streaming API piped through gzip for ~5-10x

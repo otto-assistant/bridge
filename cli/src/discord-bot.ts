@@ -1,6 +1,6 @@
 // Core Discord bot module that handles message events and bot lifecycle.
 // Bridges Discord messages to OpenCode sessions, manages voice connections,
-// and orchestrates the main event loop for the Kimaki bot.
+// and orchestrates the main event loop for the Otto bot.
 
 import {
   initDatabase,
@@ -32,8 +32,8 @@ import {
   NOTIFY_MESSAGE_FLAGS,
   reactToThread,
   stripMentions,
-  hasKimakiBotPermission,
-  hasNoKimakiRole,
+  hasOttoBotPermission,
+  hasNoOttoRole,
 } from "./discord-utils.js";
 import {
   getOpencodeSystemMessage,
@@ -61,8 +61,8 @@ import { cancelPendingFileUpload } from "./commands/file-upload.js";
 import { cancelPendingPermission } from "./commands/permissions.js";
 import { cancelHtmlActionsForThread } from "./html-actions.js";
 import {
-  ensureKimakiCategory,
-  ensureKimakiAudioCategory,
+  ensureOttoCategory,
+  ensureOttoAudioCategory,
   createProjectChannels,
   getChannelsWithDescriptions,
   type ChannelWithTags,
@@ -103,10 +103,10 @@ export {
 } from "./discord-utils.js";
 export { getOpencodeSystemMessage } from "./system-message.js";
 export {
-  ensureKimakiCategory,
-  ensureKimakiAudioCategory,
+  ensureOttoCategory,
+  ensureOttoAudioCategory,
   createProjectChannels,
-  createDefaultKimakiChannel,
+  createDefaultOttoChannel,
   getChannelsWithDescriptions,
 } from "./channel-management.js";
 export type { ChannelWithTags } from "./channel-management.js";
@@ -300,11 +300,11 @@ export async function startDiscordBot({
         discordLogger.log(`${guild.name} (${guild.id})`);
 
         const channels = await getChannelsWithDescriptions(guild);
-        const kimakiChannels = channels.filter((ch) => ch.kimakiDirectory);
+        const ottoChannels = channels.filter((ch) => ch.ottoDirectory);
 
-        if (kimakiChannels.length > 0) {
+        if (ottoChannels.length > 0) {
           discordLogger.log(
-            `  Found ${kimakiChannels.length} channel(s) for this bot`,
+            `  Found ${ottoChannels.length} channel(s) for this bot`,
           );
           continue;
         }
@@ -439,19 +439,19 @@ export async function startDiscordBot({
         : undefined;
 
       // Always ignore our own messages (unless CLI-injected prompt above).
-      // Without this, assigning the Kimaki role to the bot itself would loop.
+      // Without this, assigning the Otto role to the bot itself would loop.
       if (isSelfBotMessage && !isCliInjectedPrompt) {
         return;
       }
 
-      // Allow CLI-injected prompts from this Kimaki bot through even when role
-      // reconciliation did not give the bot the "Kimaki" role yet. Other bots
-      // still need Kimaki permission so multi-agent orchestration stays opt-in.
+      // Allow CLI-injected prompts from this Otto bot through even when role
+      // reconciliation did not give the bot the "Otto" role yet. Other bots
+      // still need Otto permission so multi-agent orchestration stays opt-in.
       const isInjectedSelfBotMessage =
         isCliInjectedPrompt && message.author?.id === discordClient.user?.id;
 
       if (message.author?.bot && !isInjectedSelfBotMessage) {
-        if (!hasKimakiBotPermission(message.member)) {
+        if (!hasOttoBotPermission(message.member)) {
           return;
         }
       }
@@ -482,7 +482,7 @@ export async function startDiscordBot({
       }
 
       // Check mention mode BEFORE permission check for text channels.
-      // When mention mode is enabled, users without Kimaki role can message
+      // When mention mode is enabled, users without Otto role can message
       // without getting a permission error - we just silently ignore.
       const channel = message.channel;
       if (channel.type === ChannelType.GuildText && !isCliInjectedPrompt) {
@@ -502,15 +502,15 @@ export async function startDiscordBot({
       }
 
       if (!isCliInjectedPrompt && message.guild && message.member) {
-        if (hasNoKimakiRole(message.member)) {
+        if (hasNoOttoRole(message.member)) {
           await message.reply({
-            content: `You have the **no-kimaki** role which blocks bot access.\nRemove this role to use Kimaki.`,
+            content: `You have the **no-otto** role which blocks bot access.\nRemove this role to use Otto.`,
             flags: SILENT_MESSAGE_FLAGS,
           });
           return;
         }
 
-        if (!hasKimakiBotPermission(message.member)) {
+        if (!hasOttoBotPermission(message.member)) {
           await message.reply({
             content: `You don't have permission to start sessions.\nTo use Otto, ask a server admin to give you the **Otto** role.`,
             flags: SILENT_MESSAGE_FLAGS,
@@ -529,9 +529,9 @@ export async function startDiscordBot({
         const thread = channel as ThreadChannel;
         discordLogger.log(`Message in thread ${thread.name} (${thread.id})`);
 
-        // Only respond in threads kimaki knows about (has a session row in DB),
+        // Only respond in threads otto knows about (has a session row in DB),
         // where the bot is explicitly @mentioned, or where the bot created the
-        // thread itself (e.g. /new-worktree, /fork, kimaki send). This prevents
+        // thread itself (e.g. /new-worktree, /fork, otto send). This prevents
         // the bot from hijacking user-created threads in project channels while
         // still responding to bot-created threads that may not yet have a session
         // row with a non-empty session_id (createPendingWorktree sets ''). (GitHub #84)
@@ -754,7 +754,7 @@ export async function startDiscordBot({
       }
 
       if (channel.type === ChannelType.GuildText) {
-        // `kimaki send` posts a starter message with a `start` embed marker,
+        // `otto send` posts a starter message with a `start` embed marker,
         // then creates the thread via REST. The ThreadCreate handler picks up
         // that thread and starts the session. If we don't skip here, this
         // handler races the CLI to call startThread() on the same message,
@@ -798,7 +798,7 @@ export async function startDiscordBot({
         // to avoid sending permission errors to users who just didn't @mention the bot.
 
         discordLogger.log(
-          `DIRECTORY: Found kimakiDirectory: ${projectDirectory}`,
+          `DIRECTORY: Found ottoDirectory: ${projectDirectory}`,
         );
 
         if (!fs.existsSync(projectDirectory)) {
