@@ -1117,9 +1117,12 @@ export async function initializeOpencodeForDirectory(
 export function buildSessionPermissions({
   directory,
   originalRepoDirectory,
+  extraAllowedDirectories,
 }: {
   directory: string
   originalRepoDirectory?: string
+  /** Additional directories to allow (e.g. other registered project dirs). */
+  extraAllowedDirectories?: string[]
 }): PermissionRuleset {
   // Normalize path separators for cross-platform compatibility (Windows uses backslashes)
   const tmpdir = os.tmpdir().replaceAll('\\', '/')
@@ -1177,6 +1180,20 @@ export function buildSessionPermissions({
     ...homeDirectoryRules({ relativePath: '.cache/go-build' }),
     ...homeDirectoryRules({ relativePath: 'go/pkg' }),
   )
+
+  // Allow other registered project directories so the model can inspect them
+  // without triggering external_directory permission prompts.
+  if (extraAllowedDirectories?.length) {
+    for (const dir of extraAllowedDirectories) {
+      const normalized = dir.replaceAll('\\', '/')
+      if (normalized !== normalizedDirectory && normalized !== originalRepo) {
+        rules.push(
+          { permission: 'external_directory', pattern: normalized, action: 'allow' },
+          { permission: 'external_directory', pattern: `${normalized}/*`, action: 'allow' },
+        )
+      }
+    }
+  }
 
   // For worktree sessions: explicitly deny the original checkout so agents do
   // not keep editing the main repo after the thread has moved to a managed

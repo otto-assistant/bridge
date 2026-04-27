@@ -4,6 +4,7 @@
 // AUTH_SECRET is the secret key for better-auth session encryption.
 
 import type { SlackBridgeDO } from './slack-bridge-do.js'
+import type { TelegramBridgeDO } from './telegram-bridge-do.js'
 
 
 export type Env = {
@@ -18,4 +19,5 @@ export type Env = {
   SLACK_SIGNING_SECRET: string
   SLACK_WORKSPACE_ID: string
   SLACK_GATEWAY: DurableObjectNamespace<SlackBridgeDO>
+  TELEGRAM_GATEWAY: DurableObjectNamespace<TelegramBridgeDO>
 }

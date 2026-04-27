@@ -11,6 +11,10 @@
       {
         "name": "SLACK_GATEWAY",
         "class_name": "SlackBridgeDO"
+      },
+      {
+        "name": "TELEGRAM_GATEWAY",
+        "class_name": "TelegramBridgeDO"
       }
     ]
   },
@@ -21,6 +25,10 @@
     },
     {
       "tag": "v3"
+    },
+    {
+      "tag": "v4",
+      "new_sqlite_classes": ["TelegramBridgeDO"]
     }
   ],
   "hyperdrive": [
@@ -51,6 +59,14 @@
     {
       "pattern": "slack-gateway.kimaki.xyz/*",
       "zone_name": "kimaki.xyz"
+    },
+    {
+      "pattern": "telegram-gateway.kimaki.dev/*",
+      "zone_name": "kimaki.dev"
+    },
+    {
+      "pattern": "telegram-gateway.kimaki.xyz/*",
+      "zone_name": "kimaki.xyz"
     }
   ],
   "env": {
@@ -58,42 +74,50 @@
       "name": "kimaki-website-preview",
       "durable_objects": {
         "bindings": [
-          {
-            "name": "SLACK_GATEWAY",
-            "class_name": "SlackBridgeDO"
-          }
-        ]
-      },
-      "hyperdrive": [
-        {
-          "binding": "HYPERDRIVE",
-          "id": "fc242a96a2d5472bb5d6a84eabaab910"
-        }
-      ],
-      "kv_namespaces": [
-        {
-          "binding": "GATEWAY_CLIENT_KV",
-          "id": "104c7f676bad499a86cc0cf6acf34476"
-        }
-      ],
-      "routes": [
-        {
-          "pattern": "preview.kimaki.dev/*",
-          "zone_name": "kimaki.dev"
-        },
-        {
-          "pattern": "preview-slack-gateway.kimaki.dev/*",
-          "zone_name": "kimaki.dev"
-        },
-        {
-          "pattern": "preview.kimaki.xyz/*",
-          "zone_name": "kimaki.xyz"
-        },
-        {
-          "pattern": "preview-slack-gateway.kimaki.xyz/*",
-          "zone_name": "kimaki.xyz"
-        }
-      ]
+      {
+        "name": "SLACK_GATEWAY",
+        "class_name": "SlackBridgeDO"
+      }
+    ]
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "fc242a96a2d5472bb5d6a84eabaab910"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "GATEWAY_CLIENT_KV",
+      "id": "104c7f676bad499a86cc0cf6acf34476"
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "preview.kimaki.dev/*",
+      "zone_name": "kimaki.dev"
+    },
+    {
+      "pattern": "preview-slack-gateway.kimaki.dev/*",
+      "zone_name": "kimaki.dev"
+    },
+    {
+      "pattern": "preview-telegram-gateway.kimaki.dev/*",
+      "zone_name": "kimaki.dev"
+    },
+    {
+      "pattern": "preview.kimaki.xyz/*",
+      "zone_name": "kimaki.xyz"
+    },
+    {
+      "pattern": "preview-slack-gateway.kimaki.xyz/*",
+      "zone_name": "kimaki.xyz"
+    },
+    {
+      "pattern": "preview-telegram-gateway.kimaki.xyz/*",
+      "zone_name": "kimaki.xyz"
+    }
+  ]
     }
   }
 }

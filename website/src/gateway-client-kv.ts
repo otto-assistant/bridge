@@ -14,7 +14,7 @@ export type GatewayClientCacheRecord = {
   updated_at: string | null
 }
 
-export type GatewayClientPlatform = 'discord' | 'slack'
+export type GatewayClientPlatform = 'discord' | 'slack' | 'telegram'
 
 export type SlackInstallStateRecord = {
   kimaki_client_id: string
@@ -321,7 +321,7 @@ function isGatewayClientCacheRecord(
     typeof record.client_id === 'string'
     && typeof record.secret === 'string'
     && typeof record.guild_id === 'string'
-    && (record.platform === 'discord' || record.platform === 'slack')
+    && (record.platform === 'discord' || record.platform === 'slack' || record.platform === 'telegram')
     && (typeof record.bot_token === 'string' || record.bot_token === null)
     && (typeof record.user_id === 'string' || record.user_id === null)
     && typeof record.created_at === 'string'

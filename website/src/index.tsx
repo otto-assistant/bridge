@@ -22,6 +22,7 @@ import {
 } from './gateway-client-kv.js'
 import { createAuth, parseAllowedCallbackUrl } from './auth.js'
 import { SlackBridgeDO } from './slack-bridge-do.js'
+import { TelegramBridgeDO } from './telegram-bridge-do.js'
 import { SlackInstallPage } from './slack-install-page.js'
 import type { Env } from './env.js'
 import privacyPolicyMarkdown from './privacy-policy.md?raw'
@@ -598,13 +599,17 @@ export const app = new Spiceflow()
     },
   })
 
-  // Slack gateway: Discord REST proxy → Durable Object
-  // Only active on slack-gateway.* hosts.
+  // Gateway: Discord REST proxy → Durable Object
+  // Routes /api/v10/* requests to the correct bridge DO based on host.
+  // Slack gateway hosts → SlackBridgeDO, Telegram gateway hosts → TelegramBridgeDO.
   .route({
     method: '*',
     path: '/api/v10/*',
     async handler({ request, state }) {
-      if (!isSlackGatewayHost(request.url)) {
+      const isSlack = isSlackGatewayHost(request.url)
+      const isTelegram = isTelegramGatewayHost(request.url)
+
+      if (!isSlack && !isTelegram) {
         return new Response('Not Found', { status: 404 })
       }
 
@@ -617,17 +622,31 @@ export const app = new Spiceflow()
       }
 
       const clientId = clientIdResult
-      const stub = state.env.SLACK_GATEWAY.getByName(clientId)
       const url = new URL(request.url)
+      const body = await request.text()
+
+      if (isSlack) {
+        const stub = state.env.SLACK_GATEWAY.getByName(clientId)
+        const response = await stub.handleDiscordRest({
+          clientId,
+          url: request.url,
+          path: url.pathname,
+          method: request.method,
+          headers: headersToPairs(request.headers),
+          body,
+        })
+        return toResponse(response)
+      }
+
+      const stub = state.env.TELEGRAM_GATEWAY.getByName(clientId)
       const response = await stub.handleDiscordRest({
         clientId,
         url: request.url,
         path: url.pathname,
         method: request.method,
         headers: headersToPairs(request.headers),
-        body: await request.text(),
+        body,
       })
-
       return toResponse(response)
     },
   })
@@ -791,6 +810,89 @@ export const app = new Spiceflow()
     },
   })
 
+  // Telegram gateway WebSocket routes
+  .route({
+    method: '*',
+    path: '/api/v10/*',
+    async handler({ request, state }) {
+      if (!isTelegramGatewayHost(request.url)) {
+        return new Response('Not Found', { status: 404 })
+      }
+
+      const clientIdResult = getClientIdFromAuthorizationHeader(request.headers)
+      if (clientIdResult instanceof Error) {
+        return new Response(JSON.stringify({ error: clientIdResult.message }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      const clientId = clientIdResult
+      const stub = state.env.TELEGRAM_GATEWAY.getByName(clientId)
+      const url = new URL(request.url)
+      const response = await stub.handleDiscordRest({
+        clientId,
+        url: request.url,
+        path: url.pathname,
+        method: request.method,
+        headers: headersToPairs(request.headers),
+        body: await request.text(),
+      })
+
+      return toResponse(response)
+    },
+  })
+
+  .route({
+    method: '*',
+    path: '/telegram/gateway',
+    async handler({ request, state }) {
+      if (!isTelegramGatewayHost(request.url)) {
+        return new Response('Not Found', { status: 404 })
+      }
+
+      const url = new URL(request.url)
+      const clientId = url.searchParams.get('clientId')
+      if (!clientId) {
+        return new Response(
+          JSON.stringify({ error: 'Missing clientId query parameter' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+
+      return proxyGatewayToTelegramDurableObject({
+        request,
+        clientId,
+        stub: state.env.TELEGRAM_GATEWAY.getByName(clientId),
+      })
+    },
+  })
+
+  .route({
+    method: '*',
+    path: '/telegram/gateway/*',
+    async handler({ request, state }) {
+      if (!isTelegramGatewayHost(request.url)) {
+        return new Response('Not Found', { status: 404 })
+      }
+
+      const url = new URL(request.url)
+      const clientId = url.searchParams.get('clientId')
+      if (!clientId) {
+        return new Response(
+          JSON.stringify({ error: 'Missing clientId query parameter' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+
+      return proxyGatewayToTelegramDurableObject({
+        request,
+        clientId,
+        stub: state.env.TELEGRAM_GATEWAY.getByName(clientId),
+      })
+    },
+  })
+
   // Mount better-auth handler for auth routes (GET and POST only).
   // Handles /api/auth/callback/discord (OAuth callback) and other
   // better-auth endpoints (session management, etc.).
@@ -841,7 +943,7 @@ export const app = new Spiceflow()
                 accounts: {
                   where: {
                     providerId: {
-                      in: ['discord', 'slack'],
+                      in: ['discord', 'slack', 'telegram'],
                     },
                   },
                 },
@@ -888,6 +990,7 @@ export default {
   // Re-exported here so Vite's tree-shaker keeps the class in the bundle.
   // Cloudflare Workers requires DO classes to be exported from the entry.
   SlackBridgeDO,
+  TelegramBridgeDO,
 }
 
 function toResponse(response: {
@@ -909,6 +1012,29 @@ function proxyGatewayToDurableObject({
   request: Request
   clientId: string
   stub: DurableObjectStub<SlackBridgeDO>
+}): Promise<Response> {
+  const url = new URL(request.url)
+  const rewrittenPath = `${url.pathname}${url.search}`
+  const durableObjectUrl = new URL(rewrittenPath, 'https://do.local')
+  return stub.fetch(
+    new Request(durableObjectUrl, {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
+      redirect: request.redirect,
+      signal: request.signal,
+    }),
+  )
+}
+
+function proxyGatewayToTelegramDurableObject({
+  request,
+  clientId,
+  stub,
+}: {
+  request: Request
+  clientId: string
+  stub: DurableObjectStub<TelegramBridgeDO>
 }): Promise<Response> {
   const url = new URL(request.url)
   const rewrittenPath = `${url.pathname}${url.search}`
@@ -1090,6 +1216,16 @@ function isSlackGatewayHost(requestUrl: string): boolean {
     isGatewayHost,
   })
   return isGatewayHost
+}
+
+function isTelegramGatewayHost(requestUrl: string): boolean {
+  const host = new URL(requestUrl).host.toLowerCase()
+  return (
+    host === 'telegram-gateway.kimaki.dev' ||
+    host === 'preview-telegram-gateway.kimaki.dev' ||
+    host === 'telegram-gateway.kimaki.xyz' ||
+    host === 'preview-telegram-gateway.kimaki.xyz'
+  )
 }
 
 function headersToPairs(headers: Headers): Array<[string, string]> {

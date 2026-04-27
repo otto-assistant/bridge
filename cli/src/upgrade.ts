@@ -11,6 +11,7 @@ import { execAsync } from './worktrees.js'
 const logger = createLogger(LogPrefix.CLI)
 
 type Pm = 'bun' | 'pnpm' | 'npm'
+type CliPackageJson = { version: string; name: string }
 
 // Detects which package manager globally installed kimaki, used to run the
 // correct `<pm> i -g kimaki@latest` upgrade command.
@@ -68,15 +69,23 @@ function resolveScriptRealpath(): string | null {
   }
 }
 
-export function getCurrentVersion(): string {
+function getCliPackageJson(): CliPackageJson {
   const require = createRequire(import.meta.url)
-  const pkg = require('../package.json') as { version: string }
-  return pkg.version
+  return require('../package.json') as CliPackageJson
+}
+
+export function getCurrentVersion(): string {
+  return getCliPackageJson().version
+}
+
+function getPackageName(): string {
+  return getCliPackageJson().name
 }
 
 export async function getLatestNpmVersion(): Promise<string | null> {
   try {
-    const res = await fetch('https://registry.npmjs.org/kimaki/latest', {
+    const packageName = encodeURIComponent(getPackageName())
+    const res = await fetch(`https://registry.npmjs.org/${packageName}/latest`, {
       signal: AbortSignal.timeout(15_000),
     })
     if (!res.ok) {
@@ -101,8 +110,9 @@ export async function upgrade(): Promise<string | null> {
   }
 
   const pm = detectPm()
-  logger.log(`Upgrading kimaki from v${current} to v${latest} using ${pm}...`)
-  await execAsync(`${pm} i -g kimaki@latest`, { timeout: 120_000 })
+  const packageName = getPackageName()
+  logger.log(`Upgrading ${packageName} from v${current} to v${latest} using ${pm}...`)
+  await execAsync(`${pm} i -g ${packageName}@latest`, { timeout: 120_000 })
 
   return latest
 }
@@ -118,9 +128,12 @@ export async function backgroundUpgradeKimaki(): Promise<void> {
     }
 
     const pm = detectPm()
-    logger.debug(`Background kimaki upgrade started: v${current} -> v${latest}`)
-    await execAsync(`${pm} i -g kimaki@latest`, { timeout: 120_000 })
-    logger.debug(`Background kimaki upgrade completed: v${latest}`)
+    const packageName = getPackageName()
+    logger.debug(
+      `Background ${packageName} upgrade started: v${current} -> v${latest}`,
+    )
+    await execAsync(`${pm} i -g ${packageName}@latest`, { timeout: 120_000 })
+    logger.debug(`Background ${packageName} upgrade completed: v${latest}`)
   } catch {
     // silently ignored, non-critical
   }

@@ -117,4 +117,5 @@ model gateway_clients {
 enum gateway_client_platform {
   discord
   slack
+  telegram
 }

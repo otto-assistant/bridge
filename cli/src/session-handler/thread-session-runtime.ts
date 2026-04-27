@@ -15,6 +15,7 @@ import type {
   Message as OpenCodeMessage,
 } from '@opencode-ai/sdk/v2'
 import path from 'node:path'
+import fs from 'node:fs'
 import prettyMilliseconds from 'pretty-ms'
 import * as errore from 'errore'
 import * as threadState from './thread-runtime-state.js'
@@ -49,6 +50,7 @@ import {
   setSessionStartSource,
   appendSessionEventsSinceLastTimestamp,
   getSessionEventSnapshot,
+  getAllTextChannelDirectories,
 } from '../database.js'
 import {
   showPermissionButtons,
@@ -2493,6 +2495,38 @@ export class ThreadSessionRuntime {
       return
     }
 
+    // Auto-deny external_directory permissions for paths that do not exist
+    // on the filesystem. There is no point asking the user to approve access
+    // to a non-existent directory — the model likely hallucinated the path.
+    if (permission.permission === 'external_directory') {
+      const allPatternsNonExistent = permission.patterns.every((pattern) => {
+        // Strip trailing glob wildcard for existence check
+        const checkPath = pattern.endsWith('/*')
+          ? pattern.slice(0, -2)
+          : pattern.endsWith('*')
+            ? pattern.slice(0, -1)
+            : pattern
+        if (!checkPath || checkPath === '*') {
+          return false
+        }
+        return !fs.existsSync(checkPath)
+      })
+      if (allPatternsNonExistent) {
+        logger.log(
+          `[PERMISSION] Auto-denying external_directory for non-existent path(s): ${permission.patterns.join(', ')}`,
+        )
+        const client = getOpencodeClient(this.projectDirectory)
+        if (client) {
+          await client.permission.reply({
+            requestID: permission.id,
+            directory: this.sdkDirectory,
+            reply: 'reject',
+          })
+        }
+        return
+      }
+    }
+
     const subtaskLabel = subtaskInfo?.label
 
     const dedupeKey = buildPermissionDedupeKey({
@@ -4049,10 +4083,12 @@ export class ThreadSessionRuntime {
       // opencode's findLast() rule evaluation.
       // CLI --permission rules are appended after base rules so they win
       // via opencode's findLast() evaluation.
+      const registeredProjectDirs = await getAllTextChannelDirectories()
       const sessionPermissions = [
         ...buildSessionPermissions({
           directory: this.sdkDirectory,
           originalRepoDirectory,
+          extraAllowedDirectories: registeredProjectDirs,
         }),
         ...parsePermissionRules(permissions ?? []),
       ]

@@ -647,7 +647,7 @@ Then use grep/read tools on the file to find what you need.
 
 ## cross-project commands
 
-When the user references another project by name, run \`kimaki project list\` to find its directory path and channel ID. Then read files, search code, or run commands directly in that directory. If the project is not listed, use \`kimaki project add /path/to/repo\` to register it and create a Discord channel for it. Do not add subfolders of an existing project — only add root project directories.
+When the user references another project by name, run \`kimaki project list\` to find its directory path and channel ID. IMPORTANT: do NOT read files from other project directories directly — that triggers an external_directory permission prompt the user must accept. Instead, always use \`kimaki send --project <dir>\` or \`kimaki send --channel <channel_id>\` to delegate work to a new session in that project. If the project is not listed, use \`kimaki project add /path/to/repo\` to register it and create a Discord channel for it. Do not add subfolders of an existing project — only add root project directories.
 
 \`\`\`bash
 # List all registered projects with their channel IDs

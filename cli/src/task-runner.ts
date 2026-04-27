@@ -15,6 +15,7 @@ import {
   markScheduledTaskOneShotCompleted,
   recoverStaleRunningScheduledTasks,
   setThreadSession,
+  getAllTextChannelDirectories,
   type ScheduledTask,
 } from "./database.js";
 import { createLogger, formatErrorWithStack, LogPrefix } from "./logger.js";
@@ -130,9 +131,10 @@ async function executeThreadScheduledTask({
         });
       }
 
+      const registeredProjectDirs = await getAllTextChannelDirectories()
       const created = await getClient().session.create({
         directory: projectDirectory,
-        permission: buildSessionPermissions({ directory: projectDirectory }),
+        permission: buildSessionPermissions({ directory: projectDirectory, extraAllowedDirectories: registeredProjectDirs }),
       });
       const sessionId = created.data?.id;
       if (!sessionId) {
@@ -293,9 +295,10 @@ async function executeChannelScheduledTask({
 
       // 4. Create session and queue the prompt
       taskLogger.log(`[task ${task.id}] Creating opencode session`);
+      const registeredProjectDirs2 = await getAllTextChannelDirectories()
       const created = await getClient().session.create({
         directory: projectDirectory,
-        permission: buildSessionPermissions({ directory: projectDirectory }),
+        permission: buildSessionPermissions({ directory: projectDirectory, extraAllowedDirectories: registeredProjectDirs2 }),
       });
       const sessionId = created.data?.id;
       if (!sessionId) {
