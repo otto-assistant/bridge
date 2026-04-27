@@ -463,6 +463,8 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.12)(@types/node@22.19.17)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.3)
 
+  otto-webui: {}
+
   sigillo:
     devDependencies:
       '@types/node':
