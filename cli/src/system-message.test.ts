@@ -63,7 +63,7 @@ describe('system-message', () => {
 
       ## upgrading kimaki
 
-      Use built-in upgrade commands when the user explicitly asks to update kimaki:
+      Use built-in upgrade commands when the user explicitly asks to update otto:
       - Discord slash command: "/upgrade-and-restart" upgrades to the latest version and restarts the bot
       - CLI command: \`kimaki upgrade\` upgrades and restarts the bot (or starts a fresh process if needed)
       - CLI command: \`kimaki upgrade --skip-restart\` upgrades without restarting
@@ -82,7 +82,7 @@ describe('system-message', () => {
 
       ## requesting files from the user
 
-      To ask the user to upload files from their device, use the \`kimaki_file_upload\` tool. This shows a native file picker dialog in Discord. The files are downloaded to the project's \`uploads/\` directory and the tool returns the local file paths.
+      To ask the user to upload files from their device, use the \`otto_file_upload\` tool. This shows a native file picker dialog in Discord. The files are downloaded to the project's \`uploads/\` directory and the tool returns the local file paths.
 
       ## archiving the current thread
 

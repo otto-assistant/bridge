@@ -974,7 +974,7 @@ export async function mergeWorktree({
   let tempBranch: string | null = null
   const branchResult = await git(worktreeDir, 'symbolic-ref --short HEAD')
   if (branchResult instanceof Error) {
-    tempBranch = `kimaki-merge-${Date.now()}`
+    tempBranch = `otto-merge-${Date.now()}`
     const createResult = await git(worktreeDir, `checkout -b "${tempBranch}"`)
     if (createResult instanceof Error) {
       return createResult

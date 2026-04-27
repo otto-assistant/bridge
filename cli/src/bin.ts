@@ -32,7 +32,7 @@ const isHelpFlag = process.argv.includes('--help')
 if (process.env.__KIMAKI_CHILD || isSubcommand || isHelpFlag) {
   await import('./cli.js')
 } else {
-  console.error('no subcommand detected. kimaki will automatically restart on crash')
+  console.error('no subcommand detected. otto will automatically restart on crash')
   console.error()
   const EXIT_NO_RESTART = 64
   const MAX_RAPID_RESTARTS = 5
@@ -79,7 +79,7 @@ if (process.env.__KIMAKI_CHILD || isSubcommand || isHelpFlag) {
 
       if (restartTimestamps.length > MAX_RAPID_RESTARTS) {
         console.error(
-          `[kimaki] Crash loop detected (${MAX_RAPID_RESTARTS} crashes in ${RAPID_RESTART_WINDOW_MS / 1000}s), exiting`,
+          `[otto] Crash loop detected (${MAX_RAPID_RESTARTS} crashes in ${RAPID_RESTART_WINDOW_MS / 1000}s), exiting`,
         )
         process.exit(1)
         return
@@ -87,7 +87,7 @@ if (process.env.__KIMAKI_CHILD || isSubcommand || isHelpFlag) {
 
       const reason = signal ? `signal ${signal}` : `code ${code}`
       console.error(
-        `[kimaki] Process exited with ${reason}, restarting in ${RESTART_DELAY_MS / 1000}s...`,
+        `[otto] Process exited with ${reason}, restarting in ${RESTART_DELAY_MS / 1000}s...`,
       )
       setTimeout(start, RESTART_DELAY_MS)
     })

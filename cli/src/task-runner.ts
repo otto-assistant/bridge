@@ -107,7 +107,7 @@ async function executeThreadScheduledTask({
   const embed = [{ color: 0x2b2d31, footer: { text: YAML.stringify(marker) } }];
   // Newline between prefix and prompt so leading /command detection can
   // find the command on its own line.
-  const prefixedPrompt = `» **kimaki-cli:**\n${payload.prompt}`;
+  const prefixedPrompt = `» **otto-cli:**\n${payload.prompt}`;
 
   // Agent-first path for silent mode: initialize opencode directly and IPC the response
   if (payload.silentPrompt) {

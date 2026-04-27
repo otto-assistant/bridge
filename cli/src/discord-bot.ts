@@ -420,7 +420,7 @@ export async function startDiscordBot({
         ? parseSessionStartSourceFromMarker(promptMarker)
         : undefined;
       const cliInjectedUsername = isCliInjectedPrompt
-        ? promptMarker?.username || "kimaki-cli"
+        ? promptMarker?.username || "otto-cli"
         : undefined;
       const cliInjectedUserId = isCliInjectedPrompt
         ? promptMarker?.userId
@@ -512,7 +512,7 @@ export async function startDiscordBot({
 
         if (!hasKimakiBotPermission(message.member)) {
           await message.reply({
-            content: `You don't have permission to start sessions.\nTo use Kimaki, ask a server admin to give you the **Kimaki** role.`,
+            content: `You don't have permission to start sessions.\nTo use Otto, ask a server admin to give you the **Otto** role.`,
             flags: SILENT_MESSAGE_FLAGS,
           });
           return;
@@ -798,7 +798,7 @@ export async function startDiscordBot({
         // to avoid sending permission errors to users who just didn't @mention the bot.
 
         discordLogger.log(
-          `DIRECTORY: Found kimaki.directory: ${projectDirectory}`,
+          `DIRECTORY: Found kimakiDirectory: ${projectDirectory}`,
         );
 
         if (!fs.existsSync(projectDirectory)) {
@@ -834,7 +834,7 @@ export async function startDiscordBot({
           ? "Voice Message"
           : stripMentions(message.content || "")
               .replace(/\s+/g, " ")
-              .trim() || "kimaki thread";
+              .trim() || "otto thread";
 
         // Check if worktrees should be enabled (CLI flag OR channel setting)
         const shouldUseWorktrees =

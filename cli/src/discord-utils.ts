@@ -33,20 +33,24 @@ import path from 'node:path'
 const discordLogger = createLogger(LogPrefix.DISCORD)
 
 /**
- * Centralized permission check for Kimaki bot access.
+ * Centralized permission check for Otto bot access.
  * Returns true if the member has permission to use the bot:
- * - Server owner, Administrator, Manage Server, or "Kimaki" role (case-insensitive).
- * Returns false if member is null or has the "no-kimaki" role (overrides all).
+ * - Server owner, Administrator, Manage Server, or "Otto" role (case-insensitive).
+ * Also accepts the legacy "Kimaki" role for backward compat on existing servers.
+ * Returns false if member is null or has the "no-otto" / "no-kimaki" role (overrides all).
  */
-export function hasKimakiBotPermission(
+export function hasOttoBotPermission(
   member: GuildMemberType | APIInteractionGuildMember | null,
   guild?: Guild | null,
 ): boolean {
   if (!member) {
     return false
   }
-  const hasNoKimakiRole = hasRoleByName(member, 'no-kimaki', guild)
-  if (hasNoKimakiRole) {
+  // Accept both "no-otto" and legacy "no-kimaki" as deny roles
+  const isDenied =
+    hasRoleByName(member, 'no-otto', guild) ||
+    hasRoleByName(member, 'no-kimaki', guild)
+  if (isDenied) {
     return false
   }
   const memberPermissions =
@@ -58,9 +62,14 @@ export function hasKimakiBotPermission(
   const isOwner = ownerId ? memberId === ownerId : false
   const isAdmin = memberPermissions.has(PermissionsBitField.Flags.Administrator)
   const canManageServer = memberPermissions.has(PermissionsBitField.Flags.ManageGuild)
-  const hasKimakiRole = hasRoleByName(member, 'kimaki', guild)
-  return isOwner || isAdmin || canManageServer || hasKimakiRole
+  // Accept both "otto" and legacy "kimaki" as allow roles
+  const hasOttoRole =
+    hasRoleByName(member, 'otto', guild) || hasRoleByName(member, 'kimaki', guild)
+  return isOwner || isAdmin || canManageServer || hasOttoRole
 }
+
+// Keep legacy name as alias for callers not yet updated
+export const hasKimakiBotPermission = hasOttoBotPermission
 
 function hasRoleByName(
   member: GuildMemberType | APIInteractionGuildMember,
@@ -88,17 +97,22 @@ function hasRoleByName(
 }
 
 /**
- * Check if the member has the "no-kimaki" role that blocks bot access.
- * Separate from hasKimakiBotPermission so callers can show a specific error message.
+ * Check if the member has the "no-otto" (or legacy "no-kimaki") role that blocks bot access.
+ * Separate from hasOttoBotPermission so callers can show a specific error message.
  */
-export function hasNoKimakiRole(member: GuildMemberType | null): boolean {
+export function hasNoOttoRole(member: GuildMemberType | null): boolean {
   if (!member?.roles?.cache) {
     return false
   }
   return member.roles.cache.some(
-    (role) => role.name.toLowerCase() === 'no-kimaki',
+    (role) =>
+      role.name.toLowerCase() === 'no-otto' ||
+      role.name.toLowerCase() === 'no-kimaki',
   )
 }
+
+// Keep legacy name as alias
+export const hasNoKimakiRole = hasNoOttoRole
 
 /**
  * React to a thread's starter message with an emoji.

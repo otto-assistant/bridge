@@ -269,7 +269,7 @@ describe('startup time measurement', () => {
 
     // Print timings for CI/local visibility
     console.log('\n┌─────────────────────────────────────────────┐')
-    console.log('│         Kimaki Startup Time Breakdown       │')
+    console.log('│         Otto Startup Time Breakdown       │')
     console.log('├─────────────────────────────────────────────┤')
     console.log(`│  Hrana server:       ${String(timings.hranaServerMs).padStart(6)} ms             │`)
     console.log(`│  Database init:      ${String(timings.databaseInitMs).padStart(6)} ms             │`)

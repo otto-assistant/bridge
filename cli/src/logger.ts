@@ -67,18 +67,18 @@ let logFilePath: string | null = null
 
 /**
  * Initialize file logging. Call this after setDataDir() so the log file
- * is written to `<dataDir>/kimaki.log`. The log file is truncated on
+ * is written to `<dataDir>/otto.log`. The log file is truncated on
  * every bot startup so it contains only the current run's logs.
  */
 export function initLogFile(dataDir: string): void {
-  logFilePath = path.join(dataDir, 'kimaki.log')
+  logFilePath = path.join(dataDir, 'otto.log')
   const logDir = path.dirname(logFilePath)
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true })
   }
   fs.writeFileSync(
     logFilePath,
-    `--- kimaki log started at ${new Date().toISOString()} ---\n`,
+    `--- otto log started at ${new Date().toISOString()} ---\n`,
   )
 }
 
@@ -88,7 +88,7 @@ export function initLogFile(dataDir: string): void {
  * the bot process already created with initLogFile().
  */
 export function setLogFilePath(dataDir: string): void {
-  logFilePath = path.join(dataDir, 'kimaki.log')
+  logFilePath = path.join(dataDir, 'otto.log')
 }
 
 export function getLogFilePath(): string | null {
@@ -158,10 +158,10 @@ const noSpacing = { spacing: 0 }
 
 // Suppress clack terminal output during vitest runs to avoid flooding
 // test output with hundreds of log lines. File logging still works.
-// Set KIMAKI_TEST_LOGS=1 when rerunning a failing test to see all
-// kimaki logger output in the terminal for debugging.
-const isVitest = !!process.env['KIMAKI_VITEST']
-const showTestLogs = isVitest && !!process.env['KIMAKI_TEST_LOGS']
+// Set OTTO_TEST_LOGS=1 (or KIMAKI_TEST_LOGS=1) when rerunning a failing
+// test to see all otto logger output in the terminal for debugging.
+const isVitest = !!(process.env['OTTO_VITEST'] || process.env['KIMAKI_VITEST'])
+const showTestLogs = isVitest && !!(process.env['OTTO_TEST_LOGS'] || process.env['KIMAKI_TEST_LOGS'])
 
 export function createLogger(prefix: LogPrefixType | string) {
   const paddedPrefix = padPrefix(prefix)

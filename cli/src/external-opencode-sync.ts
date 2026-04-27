@@ -294,10 +294,11 @@ async function ensureExternalSessionThread({
   const existingThreadId = await getThreadIdBySessionId(sessionId)
   if (existingThreadId) {
     // Caller already verified via isLatestUserTurnFromDiscord that this
-    // session should be synced. If the thread was kimaki-owned, flip it
-    // to external_poll so typing and future polls work naturally.
+    // session should be synced. If the thread was otto-owned (or legacy
+    // 'kimaki' from older DB rows), flip it to external_poll so typing
+    // and future polls work naturally.
     const existingSource = await getThreadSessionSource(existingThreadId)
-    if (existingSource === 'kimaki') {
+    if (existingSource === 'otto' || existingSource === 'kimaki') {
       await upsertThreadSession({
         threadId: existingThreadId,
         sessionId,
@@ -527,7 +528,7 @@ async function pulseTypingForBusySessions({
     if (!threadId) {
       continue
     }
-    // Skip sessions already managed by the runtime (source='kimaki')
+    // Skip sessions already managed by the runtime (source='otto' or legacy 'kimaki')
     const source = await getThreadSessionSource(threadId)
     if (source && source !== 'external_poll') {
       continue

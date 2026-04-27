@@ -120,10 +120,10 @@ describe('extractLeadingOpencodeCommand', () => {
     `)
   })
 
-  test('kimaki-cli prefix on its own line', () => {
+  test('otto-cli prefix on its own line', () => {
     expect(
       extractLeadingOpencodeCommand(
-        '» **kimaki-cli:**\n/build foo bar',
+        '» **otto-cli:**\n/build foo bar',
         fixtures,
       ),
     ).toMatchInlineSnapshot(`

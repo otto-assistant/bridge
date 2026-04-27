@@ -60,7 +60,7 @@ import {
   type OpenCodeErrors,
 } from './errors.js'
 import {
-  ensureKimakiCommandShim,
+  ensureOttoCommandShim,
   getPathEnvKey,
   getSpawnCommandAndArgs,
   prependPathEntry,
@@ -484,9 +484,19 @@ function ensureProcessCleanupHandlersRegistered(): void {
 // us spawn the binary directly and SIGTERM reaches the right process.
 let resolvedOpencodeCommand: string | null = null
 
-function looksLikeKimakiCommand(commandPath: string): boolean {
+// Guard against accidentally spawning the otto binary as the opencode server.
+// If OPENCODE_PATH or the resolved `opencode` in PATH actually points to otto
+// itself, that would cause an infinite process loop.
+function looksLikeOttoCommand(commandPath: string): boolean {
   const normalized = path.basename(commandPath).toLowerCase()
-  return normalized === 'kimaki' || normalized === 'kimaki.cmd' || normalized === 'kimaki.bat'
+  return (
+    normalized === 'otto' ||
+    normalized === 'otto.cmd' ||
+    normalized === 'otto.bat' ||
+    normalized === 'kimaki' ||
+    normalized === 'kimaki.cmd' ||
+    normalized === 'kimaki.bat'
+  )
 }
 
 export function resolveOpencodeCommand(): string {
@@ -500,13 +510,13 @@ export function resolveOpencodeCommand(): string {
       output: envPath,
       isWindows: process.platform === 'win32',
     })
-    if (resolvedFromEnv && !looksLikeKimakiCommand(resolvedFromEnv)) {
+    if (resolvedFromEnv && !looksLikeOttoCommand(resolvedFromEnv)) {
       resolvedOpencodeCommand = resolvedFromEnv
       return resolvedFromEnv
     }
     if (resolvedFromEnv) {
       opencodeLogger.warn(
-        `Ignoring OPENCODE_PATH because it points to kimaki (${resolvedFromEnv})`,
+        `Ignoring OPENCODE_PATH because it points to otto (${resolvedFromEnv})`,
       )
     }
   }
@@ -523,11 +533,11 @@ export function resolveOpencodeCommand(): string {
         output: commandOutput,
         isWindows,
       })
-      if (resolved && !looksLikeKimakiCommand(resolved)) {
+      if (resolved && !looksLikeOttoCommand(resolved)) {
         return resolved
       }
       if (resolved) {
-        throw new Error(`opencode command resolves to kimaki binary (${resolved})`)
+        throw new Error(`opencode command resolves to otto binary (${resolved})`)
       }
       throw new Error('opencode not found in PATH')
     },
@@ -690,9 +700,9 @@ async function startSingleServer({
 
   // Server config uses permissive defaults. Per-directory external_directory
   // permissions are set at session creation time via session.create({ permission }).
-  // Common directories (tmpdir, ~/.config/opencode, ~/.kimaki) are pre-allowed
-  // at the server level so they never trigger permission prompts regardless of
-  // whether session-level rules compose correctly.
+  // Common directories (tmpdir, ~/.config/opencode, the otto data dir) are
+  // pre-allowed at the server level so they never trigger permission prompts
+  // regardless of whether session-level rules compose correctly.
   const tmpdir = os.tmpdir().replaceAll('\\', '/')
   const opencodeConfigDir = path
     .join(os.homedir(), '.config', 'opencode')
@@ -700,9 +710,8 @@ async function startSingleServer({
   const opensrcDir = path
     .join(os.homedir(), '.opensrc')
     .replaceAll('\\', '/')
-  const kimakiDataDir = path
-    .join(os.homedir(), '.kimaki')
-    .replaceAll('\\', '/')
+  // Allow the actual data dir (could be ~/.otto or legacy ~/.kimaki)
+  const ottoDataDir = getDataDir().replaceAll('\\', '/')
   // No catch-all '*': 'ask' here — the user's opencode.json default is respected.
   // Only allowlist specific known-safe directories at the server level.
   const externalDirectoryPermissions: Record<string, 'ask' | 'allow' | 'deny'> = {
@@ -716,36 +725,36 @@ async function startSingleServer({
     [`${opencodeConfigDir}/*`]: 'allow',
     [opensrcDir]: 'allow',
     [`${opensrcDir}/*`]: 'allow',
-    [kimakiDataDir]: 'allow',
-    [`${kimakiDataDir}/*`]: 'allow',
+    [ottoDataDir]: 'allow',
+    [`${ottoDataDir}/*`]: 'allow',
   }
-  const kimakiShimDirectory = ensureKimakiCommandShim({
+  const ottoShimDirectory = ensureOttoCommandShim({
     dataDir: getDataDir(),
     execPath: process.execPath,
     execArgv: process.execArgv,
     entryScript: process.argv[1] || fileURLToPath(new URL('../bin.js', import.meta.url)),
   })
   const pathEnvKey = getPathEnvKey(process.env)
-  const pathEnv = kimakiShimDirectory instanceof Error
+  const pathEnv = ottoShimDirectory instanceof Error
     ? process.env[pathEnvKey]
     : prependPathEntry({
-        entry: kimakiShimDirectory,
+        entry: ottoShimDirectory,
         existingPath: process.env[pathEnvKey],
       })
-  if (kimakiShimDirectory instanceof Error) {
-    opencodeLogger.warn(kimakiShimDirectory.message)
+  if (ottoShimDirectory instanceof Error) {
+    opencodeLogger.warn(ottoShimDirectory.message)
   }
   const gatewayToken = store.getState().gatewayToken
   const opencodeConfigHomeDir = path.join(getDataDir(), 'opencode-home')
   fs.mkdirSync(opencodeConfigHomeDir, { recursive: true })
   const vitestOpencodeEnv = (() => {
-    if (process.env.KIMAKI_VITEST !== '1') {
+    if (process.env.OTTO_VITEST !== '1' && process.env.KIMAKI_VITEST !== '1') {
       return {}
     }
     const root = path.join(getDataDir(), 'opencode-vitest-home')
     const directories = {
       OPENCODE_TEST_HOME: root,
-      OPENCODE_CONFIG_DIR: path.join(root, '.opencode-kimaki'),
+      OPENCODE_CONFIG_DIR: path.join(root, '.opencode-otto'),
       XDG_CONFIG_HOME: path.join(root, '.config'),
       XDG_DATA_HOME: path.join(root, '.local', 'share'),
       XDG_CACHE_HOME: path.join(root, '.cache'),
@@ -777,12 +786,12 @@ async function startSingleServer({
     $schema: 'https://opencode.ai/config.json',
     lsp: false,
     formatter: false,
-    plugin: [
-      new URL(
-        isDev ? './kimaki-opencode-plugin.ts' : './kimaki-opencode-plugin.js',
-        import.meta.url,
-      ).href,
-    ],
+      plugin: [
+        new URL(
+          isDev ? './otto-opencode-plugin.ts' : './otto-opencode-plugin.js',
+          import.meta.url,
+        ).href,
+      ],
     permission: {
       edit: 'allow',
       bash: 'allow',
@@ -846,7 +855,7 @@ async function startSingleServer({
         KIMAKI_DATA_DIR: getDataDir(),
         KIMAKI_LOCK_PORT: getLockPort().toString(),
         ...(gatewayToken && { KIMAKI_DB_AUTH_TOKEN: gatewayToken }),
-        // Guard: prevents agents from running `kimaki` root command inside
+        // Guard: prevents agents from running `otto` root command inside
         // an OpenCode session, which would steal the lock port and break the bot.
         KIMAKI_OPENCODE_PROCESS: '1',
         ...(getHranaUrl() && { KIMAKI_DB_URL: getHranaUrl()! }),

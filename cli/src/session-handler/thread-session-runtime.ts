@@ -2160,7 +2160,7 @@ export class ThreadSessionRuntime {
     if (
       part.type === 'tool' &&
       part.state.status === 'completed' &&
-      part.tool.endsWith('kimaki_action_buttons')
+      part.tool.endsWith('otto_action_buttons')
     ) {
       const sessionId = this.state?.sessionId
       await this.showInteractiveUi({
@@ -4099,7 +4099,7 @@ export class ThreadSessionRuntime {
       })
       session = sessionResponse.data
       // Insert DB row immediately so the external-sync poller sees
-      // source='kimaki' before the next poll tick and skips this session.
+      // source='otto' before the next poll tick and skips this session.
       // The upsert at the end of ensureSession is kept for the reuse path.
       if (session) {
         await setThreadSession(this.thread.id, session.id)

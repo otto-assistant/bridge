@@ -1,5 +1,5 @@
 // Worktree management command: /new-worktree
-// Uses OpenCode SDK v2 to create worktrees with kimaki- prefix
+// Uses OpenCode SDK v2 to create worktrees with otto- prefix
 // Creates thread immediately, then worktree in background so user can type
 
 import {
@@ -77,7 +77,7 @@ class WorktreeError extends Error {
 
 /**
  * Lowercase, collapse whitespace to dashes, drop non-[a-z0-9-] chars.
- * Does NOT add the `opencode/kimaki-` prefix — callers do that so they can
+ * Does NOT add the `opencode/otto-` prefix — callers do that so they can
  * optionally compress the slug first for auto-derived names.
  */
 export function slugifyWorktreeName(name: string): string {
@@ -119,20 +119,20 @@ export function shortenWorktreeSlug(slug: string): string {
 }
 
 /**
- * Format worktree name: lowercase, spaces to dashes, remove special chars, add opencode/kimaki- prefix.
- * "My Feature" → "opencode/kimaki-my-feature"
+ * Format worktree name: lowercase, spaces to dashes, remove special chars, add opencode/otto- prefix.
+ * "My Feature" → "opencode/otto-my-feature"
  * Returns empty string if no valid name can be extracted.
  *
  * This is the "explicit" path used when the user provides a specific name.
  * The slug is NOT compressed — if you ask for `my-long-explicit-branch-name`
- * you get `opencode/kimaki-my-long-explicit-branch-name` verbatim.
+ * you get `opencode/otto-my-long-explicit-branch-name` verbatim.
  */
 export function formatWorktreeName(name: string): string {
   const slug = slugifyWorktreeName(name)
   if (!slug) {
     return ''
   }
-  return `opencode/kimaki-${slug}`
+  return `opencode/otto-${slug}`
 }
 
 /**
@@ -145,21 +145,21 @@ export function formatAutoWorktreeName(name: string): string {
   if (!slug) {
     return ''
   }
-  return `opencode/kimaki-${shortenWorktreeSlug(slug)}`
+  return `opencode/otto-${shortenWorktreeSlug(slug)}`
 }
 
 /**
  * Derive worktree name from thread name.
- * Handles existing "⬦ worktree: opencode/kimaki-name" format or uses thread name directly.
- * Uses formatAutoWorktreeName so long thread titles get vowel-compressed.
+ * Handles existing "⬦ worktree: opencode/otto-name" (or legacy opencode/kimaki-name) format,
+ * or uses thread name directly. Uses formatAutoWorktreeName so long thread titles get vowel-compressed.
  */
 function deriveWorktreeNameFromThread(threadName: string): string {
-  // Handle existing "⬦ worktree: opencode/kimaki-name" format
+  // Handle existing "⬦ worktree: opencode/otto-name" (or legacy kimaki-) format
   const worktreeMatch = threadName.match(/worktree:\s*(.+)$/i)
   const extractedName = worktreeMatch?.[1]?.trim()
   if (extractedName) {
-    // If already has opencode/kimaki- prefix, return as is
-    if (extractedName.startsWith('opencode/kimaki-')) {
+    // If already has opencode/otto- or legacy opencode/kimaki- prefix, return as is
+    if (extractedName.startsWith('opencode/otto-') || extractedName.startsWith('opencode/kimaki-')) {
       return extractedName
     }
     return formatAutoWorktreeName(extractedName)

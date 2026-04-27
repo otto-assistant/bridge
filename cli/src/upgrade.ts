@@ -1,6 +1,6 @@
-// Kimaki self-upgrade utilities.
-// Detects the package manager used to install kimaki, checks npm for newer versions,
-// and runs the global upgrade command. Used by both CLI `kimaki upgrade` and
+// Otto self-upgrade utilities.
+// Detects the package manager used to install otto, checks npm for newer versions,
+// and runs the global upgrade command. Used by both CLI `otto upgrade` and
 // the Discord `/upgrade-and-restart` command, plus background auto-upgrade on startup.
 
 import fs from 'node:fs'
@@ -13,8 +13,8 @@ const logger = createLogger(LogPrefix.CLI)
 type Pm = 'bun' | 'pnpm' | 'npm'
 type CliPackageJson = { version: string; name: string }
 
-// Detects which package manager globally installed kimaki, used to run the
-// correct `<pm> i -g kimaki@latest` upgrade command.
+// Detects which package manager globally installed otto, used to run the
+// correct `<pm> i -g @otto-assistant/bridge@latest` upgrade command.
 //
 // Detection order:
 // 1. npm_config_user_agent — set by npx/bunx/pnpm dlx, reliable for those cases
@@ -46,7 +46,7 @@ export function detectPm(): Pm {
     if (p.includes('/pnpm/')) {
       return 'pnpm'
     }
-    // npm global installs typically live under lib/node_modules/kimaki without
+    // npm global installs typically live under lib/node_modules/@otto-assistant without
     // any pnpm or bun path segments, so if we reach here it's likely npm
   }
 
@@ -119,7 +119,7 @@ export async function upgrade(): Promise<string | null> {
 
 // Fire-and-forget background upgrade check on bot startup.
 // Only upgrades if a newer version is available. Errors are silently ignored.
-export async function backgroundUpgradeKimaki(): Promise<void> {
+export async function backgroundUpgradeOtto(): Promise<void> {
   try {
     const current = getCurrentVersion()
     const latest = await getLatestNpmVersion()

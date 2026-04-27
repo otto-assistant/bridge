@@ -1,6 +1,6 @@
 // OpenCode plugin that provides IPC-based tools for Discord interaction:
-// - kimaki_file_upload: prompts the Discord user to upload files via native picker
-// - kimaki_action_buttons: shows clickable action buttons in the Discord thread
+// - otto_file_upload: prompts the Discord user to upload files via native picker
+// - otto_action_buttons: shows clickable action buttons in the Discord thread
 //
 // Tools communicate with the bot process via IPC rows in SQLite (the plugin
 // runs inside the OpenCode server process, not the bot process).
@@ -68,7 +68,7 @@ const ipcToolsPlugin: any = async () => {
 
   return {
     tool: {
-      kimaki_file_upload: tool({
+      otto_file_upload: tool({
         description:
           'Prompt the Discord user to upload files using a native file picker modal. ' +
           'The user sees a button, clicks it, and gets a file upload dialog. ' +
@@ -142,7 +142,7 @@ const ipcToolsPlugin: any = async () => {
           return 'File upload timed out - user did not upload files within the time limit'
         },
       }),
-      kimaki_action_buttons: tool({
+      otto_action_buttons: tool({
         description: dedent`
           Show action buttons in the current Discord thread for quick confirmations.
           Use this when the user can respond by clicking one of up to 3 buttons.

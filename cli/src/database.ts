@@ -1018,7 +1018,7 @@ export async function setThreadSession(
   await upsertThreadSession({
     threadId,
     sessionId,
-    source: 'kimaki',
+    source: 'otto',
   })
 }
 

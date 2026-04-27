@@ -14,7 +14,7 @@ export const OTTO_CONFIG = {
   /** GitHub organization */
   org: "otto-assistant",
   /** Upstream repository */
-  upstream: "remorses/kimaki",
+  upstream: "otto-assistant/bridge",
   /** Distribution name */
   distributionName: "Otto",
   /** Homepage */

@@ -1,6 +1,6 @@
 // /worktrees command — list all git worktrees for the current channel's project.
 // Uses `git worktree list --porcelain` as source of truth, enriched with
-// DB metadata (thread link, created_at) when available. Shows kimaki-created,
+// DB metadata (thread link, created_at) when available. Shows otto-created,
 // opencode-created, and manually created worktrees in a single table.
 // Renders a markdown table that the CV2 pipeline auto-formats for Discord,
 // including HTML-backed action buttons for deletable worktrees.
@@ -89,7 +89,7 @@ type WorktreeRow = {
   threadId: string | null
   guildId: string | null
   createdAt: Date | null
-  source: 'kimaki' | 'opencode' | 'manual'
+  source: 'otto' | 'opencode' | 'manual'
   // DB-only worktrees (pending/error) won't appear in git list
   dbStatus: 'ready' | 'pending' | 'error'
   // Git-level flags that block deletion
@@ -119,16 +119,17 @@ const GIT_CMD_TIMEOUT = 5_000
 const GLOBAL_TIMEOUT = 10_000
 
 // Detect worktree source from branch name and directory path.
-// opencode/kimaki-* branches → kimaki, opencode worktree paths → opencode, else manual.
+// opencode/otto-* and legacy opencode/kimaki-* branches → otto,
+// opencode worktree paths → opencode, else manual.
 function detectWorktreeSource({
   branch,
   directory,
 }: {
   branch: string | null
   directory: string
-}): 'kimaki' | 'opencode' | 'manual' {
-  if (branch?.startsWith('opencode/kimaki-')) {
-    return 'kimaki'
+}): 'otto' | 'opencode' | 'manual' {
+  if (branch?.startsWith('opencode/otto-') || branch?.startsWith('opencode/kimaki-')) {
+    return 'otto'
   }
   // opencode stores worktrees under ~/.local/share/opencode/worktree/
   if (directory.includes('/opencode/worktree/')) {
@@ -395,7 +396,7 @@ async function buildWorktreeRows({
         threadId: dbWt.thread_id,
         guildId: null,
         createdAt: dbWt.created_at,
-        source: 'kimaki' as const,
+        source: 'otto' as const,
         dbStatus,
         locked: false,
         prunable: false,
@@ -579,7 +580,7 @@ async function handleDeleteWorktreeAction({
     return
   }
 
-  // Clean up DB row if this was a kimaki-tracked worktree
+  // Clean up DB row if this was an otto-tracked worktree
   if (row.threadId) {
     await deleteThreadWorktree(row.threadId)
   }

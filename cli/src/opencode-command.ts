@@ -1,7 +1,7 @@
-// Shared OpenCode and Kimaki command resolution helpers.
+// Shared OpenCode and Otto command resolution helpers.
 // Normalizes `which`/`where` output across platforms, builds safe spawn
 // arguments for Windows npm `.cmd` shims without relying on `shell: true`,
-// and creates a stable `kimaki` shim for OpenCode child processes.
+// and creates a stable `otto` shim for OpenCode child processes.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -90,7 +90,7 @@ export function getSpawnCommandAndArgs({
   }
 }
 
-export function ensureKimakiCommandShim({
+export function ensureOttoCommandShim({
   dataDir,
   execPath,
   execArgv,
@@ -111,7 +111,7 @@ export function ensureKimakiCommandShim({
     const launcherArgs = [...execArgv, entryScript]
 
     if (effectivePlatform === 'win32') {
-      const shimPath = path.join(shimDirectory, 'kimaki.cmd')
+      const shimPath = path.join(shimDirectory, 'otto.cmd')
       const shimContent = [
         '@echo off',
         [execPath, ...launcherArgs].map((segment) => {
@@ -126,7 +126,7 @@ export function ensureKimakiCommandShim({
       return shimDirectory
     }
 
-    const shimPath = path.join(shimDirectory, 'kimaki')
+    const shimPath = path.join(shimDirectory, 'otto')
     const shimContent = [
       '#!/bin/sh',
       `exec ${[execPath, ...launcherArgs].map((segment) => {
@@ -141,9 +141,12 @@ export function ensureKimakiCommandShim({
     })
     return shimDirectory
   } catch (cause) {
-    return new Error('Failed to create kimaki command shim', { cause })
+    return new Error('Failed to create otto command shim', { cause })
   }
 }
+
+// Keep legacy name as alias for any callers not yet updated
+export const ensureKimakiCommandShim = ensureOttoCommandShim
 
 export function prependPathEntry({
   entry,

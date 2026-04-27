@@ -353,7 +353,7 @@ export function getToolSummaryText(part: Part): string {
   }
 
   // File upload tool - show the prompt
-  if (part.tool.endsWith('kimaki_file_upload')) {
+  if (part.tool.endsWith('otto_file_upload')) {
     const prompt = (part.state.input?.prompt as string) || ''
     return prompt ? `*${escapeInlineMarkdown(prompt.slice(0, 60))}*` : ''
   }
@@ -460,12 +460,12 @@ export function formatPart(part: Part, prefix?: string): string {
     }
 
     // File upload tool is handled via Discord button + modal, not text
-    if (part.tool.endsWith('kimaki_file_upload')) {
+    if (part.tool.endsWith('otto_file_upload')) {
       return ''
     }
 
     // Action buttons tool is handled via Discord buttons, not text
-    if (part.tool.endsWith('kimaki_action_buttons')) {
+    if (part.tool.endsWith('otto_action_buttons')) {
       return ''
     }
 

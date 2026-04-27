@@ -303,8 +303,8 @@ async function dispatchRequest({
       if (parsed.initialPrompt && parsed.initialPrompt.trim().length > 0) {
         const enqueueResult = await runtime.enqueueIncoming({
           prompt: parsed.initialPrompt,
-          userId: parsed.userId || "kimaki-cli",
-          username: parsed.username || "kimaki-cli",
+          userId: parsed.userId || "otto-cli",
+          username: parsed.username || "otto-cli",
           sourceMessageId: parsed.sourceMessageId,
           sourceThreadId: parsed.sourceThreadId,
           appId: parsed.appId,

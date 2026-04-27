@@ -26,7 +26,9 @@
     "prepare-skills": "rm -rf skills && mkdir -p skills && cp -R ../skills/. skills",
     "sync-skills": "tsx scripts/sync-skills.ts"
   },
-  "bin": "bin.js",
+  "bin": {
+    "otto": "bin.js"
+  },
   "files": [
     "dist",
     "src",

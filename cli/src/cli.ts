@@ -110,7 +110,7 @@ import {
 } from './config.js'
 import { execAsync, validateWorktreeDirectory } from './worktrees.js'
 import {
-  backgroundUpgradeKimaki,
+  backgroundUpgradeOtto,
   upgrade,
   getCurrentVersion,
 } from './upgrade.js'
@@ -200,8 +200,9 @@ async function resolveBotCredentials({ appIdOverride }: { appIdOverride?: string
 }> {
   // DB first: getBotTokenWithMode() sets store.discordBaseUrl which is
   // required in gateway mode so REST calls route through the proxy.
-  // Without this, inherited KIMAKI_BOT_TOKEN (a gateway credential like
-  // clientId:clientSecret) would be sent directly to discord.com → 401.
+  // Without this, inherited OTTO_BOT_TOKEN / KIMAKI_BOT_TOKEN (a gateway
+  // credential like clientId:clientSecret) would be sent directly to
+  // discord.com → 401.
   const botRow = await getBotTokenWithMode().catch((e: unknown) => {
     cliLogger.error('Database error:', e instanceof Error ? e.message : String(e))
     return null
@@ -211,13 +212,14 @@ async function resolveBotCredentials({ appIdOverride }: { appIdOverride?: string
   }
 
   // Fall back to env var for CI/headless deployments with no database
-  const envToken = process.env.KIMAKI_BOT_TOKEN
+  // Supports both OTTO_BOT_TOKEN (new) and KIMAKI_BOT_TOKEN (legacy)
+  const envToken = process.env.OTTO_BOT_TOKEN || process.env.KIMAKI_BOT_TOKEN
   if (envToken) {
     const appId = appIdOverride || appIdFromToken(envToken)
     return { token: envToken, appId }
   }
 
-  cliLogger.error('No bot token found. Set KIMAKI_BOT_TOKEN env var or run `kimaki` first to set up.')
+  cliLogger.error('No bot token found. Set OTTO_BOT_TOKEN env var or run `otto` first to set up.')
   process.exit(EXIT_NO_RESTART)
 }
 
@@ -372,7 +374,7 @@ function canUseInteractivePrompts(): boolean {
 
 function exitNonInteractiveSetup(): never {
   cliLogger.error(
-    'Setup requires an interactive terminal (TTY) for prompts. Run `kimaki` in an interactive shell to complete setup.',
+    'Setup requires an interactive terminal (TTY) for prompts. Run `otto` in an interactive shell to complete setup.',
   )
   process.exit(EXIT_NO_RESTART)
 }
@@ -475,7 +477,7 @@ async function printDiscordInstallUrlAndExit({
   const existingBot = await getBotTokenWithMode()
 
   if (!existingBot) {
-    cliLogger.error('No bot configured yet. Run `kimaki` first to set up.')
+    cliLogger.error('No bot configured yet. Run `otto` first to set up.')
     process.exit(EXIT_NO_RESTART)
   }
 
@@ -665,9 +667,9 @@ function startCaffeinate() {
     )
   }
 }
-const cli = goke('kimaki')
+const cli = goke('otto')
 
-process.title = 'kimaki'
+process.title = 'otto'
 
 // Result of credential resolution. `credentialSource` indicates how the
 // credentials were obtained so downstream code can decide whether to show
@@ -789,13 +791,13 @@ function showReadyMessage({
       .join('\n')
 
     note(
-      `Your kimaki channels are ready! Click any link below to open in Discord:\n\n${channelLinks}\n\nSend a message in any channel to start using OpenCode!`,
+      `Your otto channels are ready! Click any link below to open in Discord:\n\n${channelLinks}\n\nSend a message in any channel to start using OpenCode!`,
       '🚀 Ready to Use',
     )
   }
 
   note(
-    'Leave this process running to keep the bot active.\n\nIf you close this process or restart your machine, run `npx kimaki` again to start the bot.',
+    'Leave this process running to keep the bot active.\n\nIf you close this process or restart your machine, run `otto` again to start the bot.',
     '⚠️  Keep Running',
   )
 }
@@ -1300,8 +1302,7 @@ async function run({
     }),
   ])
 
-
-  backgroundUpgradeKimaki()
+  backgroundUpgradeOtto()
 
   // Start in-process Hrana server before database init. Required for the bot
   // process because it serves as both the DB server and the single-instance
@@ -1498,7 +1499,7 @@ async function run({
       'No Discord servers found. The bot must be installed in at least one server.\n' +
         `Install URL: ${installUrl}\n` +
         'Do not share this URL with anyone — it contains your credentials.\n' +
-        'Open the URL above to add the bot to a server, then run kimaki again.',
+        'Open the URL above to add the bot to a server, then run otto again.',
     )
     discordClient.destroy()
     process.exit(EXIT_NO_RESTART)
@@ -1803,7 +1804,7 @@ cli
   )
   .option(
     '--data-dir <path>',
-    'Data directory for config and database (default: ~/.kimaki)',
+    'Data directory for config and database (default: ~/.otto)',
   )
   .option(
     '--projects-dir <path>',
@@ -1849,7 +1850,7 @@ cli
       .array(z.string())
       .optional()
       .describe(
-        'Whitelist a built-in skill by name. Only the listed skills are injected into the model (all others are hidden via an opencode permission.skill deny-all rule). Repeatable: pass --enable-skill multiple times. Mutually exclusive with --disable-skill. See https://github.com/remorses/kimaki/tree/main/skills for available skills.',
+        'Whitelist a built-in skill by name. Only the listed skills are injected into the model (all others are hidden via an opencode permission.skill deny-all rule). Repeatable: pass --enable-skill multiple times. Mutually exclusive with --disable-skill. See https://github.com/otto-assistant/bridge/tree/main/skills for available skills.',
       ),
   )
   .option(
@@ -1858,7 +1859,7 @@ cli
       .array(z.string())
       .optional()
       .describe(
-        'Blacklist a built-in skill by name. Listed skills are hidden from the model. Repeatable: pass --disable-skill multiple times. Mutually exclusive with --enable-skill. See https://github.com/remorses/kimaki/tree/main/skills for available skills.',
+        'Blacklist a built-in skill by name. Listed skills are hidden from the model. Repeatable: pass --disable-skill multiple times. Mutually exclusive with --enable-skill. See https://github.com/otto-assistant/bridge/tree/main/skills for available skills.',
       ),
   )
   .action(
@@ -1880,14 +1881,14 @@ cli
       enableSkill?: string[]
       disableSkill?: string[]
     }) => {
-      // Guard: only one kimaki bot process can run at a time (they share a lock
-      // port). Running `kimaki` here would kill the already-running bot process
+      // Guard: only one otto bot process can run at a time (they share a lock
+      // port). Running `otto` here would kill the already-running bot process
       // and take over the lock port, breaking all active Discord sessions.
       if (process.env.KIMAKI_OPENCODE_PROCESS) {
         cliLogger.error(
-          'Cannot run `kimaki` inside an OpenCode session — it would kill the already-running bot process.\n' +
-          'Only one kimaki bot can run at a time (they share a lock port).\n' +
-          'Use `kimaki send`, `kimaki session`, or other subcommands instead.',
+          'Cannot run `otto` inside an OpenCode session — it would kill the already-running bot process.\n' +
+          'Only one otto bot can run at a time (they share a lock port).\n' +
+          'Use `otto send`, `otto session`, or other subcommands instead.',
         )
         process.exit(EXIT_NO_RESTART)
       }
@@ -1904,7 +1905,7 @@ cli
           cliLogger.log(`Using projects directory: ${getProjectsDir()}`)
         }
 
-        // Initialize file logging to <dataDir>/kimaki.log
+        // Initialize file logging to <dataDir>/otto.log
         initLogFile(getDataDir())
 
         // Batch all CLI flag store updates into a single setState call.
@@ -1957,7 +1958,7 @@ cli
           for (const name of [...enabledSkills, ...disabledSkills]) {
             if (!availableSet.has(name)) {
               cliLogger.warn(
-                `Skill "${name}" is not a bundled kimaki skill. Rule will still apply (user-provided skills from .opencode/.claude/.agents dirs may match). Available bundled skills: ${availableBundledSkills.join(', ')}`,
+                `Skill "${name}" is not a bundled otto skill. Rule will still apply (user-provided skills from .opencode/.claude/.agents dirs may match). Available bundled skills: ${availableBundledSkills.join(', ')}`,
               )
             }
           }
@@ -2036,7 +2037,7 @@ cli
   .command('discord-install-url', 'Print the bot install URL and exit')
   .option(
     '--data-dir <path>',
-    'Data directory for config and database (default: ~/.kimaki)',
+    'Data directory for config and database (default: ~/.otto)',
   )
   .option(
     '--gateway',
@@ -2091,7 +2092,7 @@ cli
   )
   .option(
     '--data-dir <path>',
-    'Data directory for config and database (default: ~/.kimaki)',
+    'Data directory for config and database (default: ~/.otto)',
   )
   .option(
     '--gateway',
@@ -2171,7 +2172,7 @@ cli
   .command('bot status set <text>', 'Set the bot presence/status in Discord')
   .option(
     '--data-dir <path>',
-    'Data directory for config and database (default: ~/.kimaki)',
+    'Data directory for config and database (default: ~/.otto)',
   )
   .option(
     '--type <activityType>',
@@ -2199,7 +2200,7 @@ cli
 
         const botRow = await getBotTokenWithMode()
         if (!botRow) {
-          cliLogger.error('No bot configured. Run `kimaki` first.')
+          cliLogger.error('No bot configured. Run `otto` first.')
           process.exit(EXIT_NO_RESTART)
         }
         if (botRow.mode === 'gateway') {
@@ -2277,7 +2278,7 @@ cli
   .command('bot status clear', 'Clear the bot presence/status')
   .option(
     '--data-dir <path>',
-    'Data directory for config and database (default: ~/.kimaki)',
+    'Data directory for config and database (default: ~/.otto)',
   )
   .action(async (options: { dataDir?: string }) => {
     try {
@@ -2289,7 +2290,7 @@ cli
 
       const botRow = await getBotTokenWithMode()
       if (!botRow) {
-        cliLogger.error('No bot configured. Run `kimaki` first.')
+        cliLogger.error('No bot configured. Run `otto` first.')
         process.exit(EXIT_NO_RESTART)
       }
       if (botRow.mode === 'gateway') {
@@ -2367,7 +2368,7 @@ cli
 
       if (!botRow) {
         cliLogger.error(
-          'No bot credentials found. Run `kimaki` first to set up the bot.',
+          'No bot credentials found. Run `otto` first to set up the bot.',
         )
         process.exit(EXIT_NO_RESTART)
       }
@@ -2676,7 +2677,7 @@ cli
               if (!appId) {
                 cliLogger.log('Missing app ID')
                 cliLogger.error(
-                  'App ID is required to create channels. Use --app-id or run `kimaki` first.',
+                  'App ID is required to create channels. Use --app-id or run `otto` first.',
                 )
                 process.exit(EXIT_NO_RESTART)
               }
@@ -2842,7 +2843,7 @@ cli
           // Prefix the prompt so it's clear who sent it (matches /queue format).
           // Use a newline between prefix and prompt so leading /command
           // detection can find the command on its own line.
-          const prefixedPrompt = `» **kimaki-cli:**\n${prompt}`
+          const prefixedPrompt = `» **otto:**\n${prompt}`
 
           await sendDiscordMessageWithOptionalAttachment({
             channelId: targetThreadId,
@@ -3412,7 +3413,7 @@ cli
 
     if (resolvedIndex < 0) {
       cliLogger.error(
-        'Usage: kimaki anthropic-accounts remove <index-or-email>',
+        'Usage: otto anthropic-accounts remove <index-or-email>',
       )
       process.exit(EXIT_NO_RESTART)
     }
@@ -3974,7 +3975,7 @@ cli
 
       if (!options.port) {
         cliLogger.error('Error: --port is required')
-        cliLogger.error(`\nUsage: kimaki tunnel -p <port> [-- command]`)
+        cliLogger.error(`\nUsage: otto tunnel -p <port> [-- command]`)
         process.exit(EXIT_NO_RESTART)
       }
 
@@ -4099,7 +4100,7 @@ cli
             title: session.title || 'Untitled Session',
             directory: session.directory,
             updated: new Date(session.time.updated).toISOString(),
-            source: sessionToThread.has(session.id) ? 'kimaki' : 'opencode',
+            source: sessionToThread.has(session.id) ? 'otto' : 'opencode',
             threadId: sessionToThread.get(session.id) || null,
             startedBy,
             scheduledTaskId: startSource?.scheduled_task_id || null,
@@ -4112,7 +4113,7 @@ cli
       for (const session of sessions) {
         const threadId = sessionToThread.get(session.id)
         const startSource = sessionStartSources.get(session.id)
-        const source = threadId ? '(kimaki)' : '(opencode)'
+        const source = threadId ? '(otto)' : '(opencode)'
         const startedBy = startSource
           ? ` | started-by: ${scheduleModeLabel({ scheduleKind: startSource.schedule_kind })}${startSource.scheduled_task_id ? ` (#${startSource.scheduled_task_id})` : ''}`
           : ''
@@ -4305,7 +4306,7 @@ cli
         title: string
         directory: string
         updated: string
-        source: 'kimaki' | 'opencode'
+        source: 'otto' | 'opencode'
         threadId: string | null
         snippets: string[]
       }> = []
@@ -4357,7 +4358,7 @@ cli
           title: session.title || 'Untitled Session',
           directory: session.directory,
           updated: new Date(session.time.updated).toISOString(),
-          source: threadId ? 'kimaki' : 'opencode',
+          source: threadId ? 'otto' : 'opencode',
           threadId: threadId || null,
           snippets,
         })
@@ -4647,7 +4648,7 @@ cli
 cli
   .command(
     'upgrade',
-    'Upgrade kimaki to the latest version and restart the running bot',
+    'Upgrade otto to the latest version and restart the running bot',
   )
   .option('--skip-restart', 'Only upgrade, do not restart the running bot')
   .action(async (options) => {
@@ -4667,10 +4668,10 @@ cli
         process.exit(0)
       }
 
-      // Spawn a new kimaki process without args (starts the bot with default command).
+      // Spawn a new otto process without args (starts the bot with default command).
       // The new process kills the old one via the single-instance lock.
       // No args passed to avoid recursively running `upgrade` again.
-      const child = spawn('kimaki', [], {
+      const child = spawn('otto', [], {
         shell: true,
         stdio: 'ignore',
         detached: true,

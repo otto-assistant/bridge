@@ -1,4 +1,4 @@
-// Runtime configuration for Kimaki bot.
+// Runtime configuration for Otto bot (formerly Kimaki).
 // Thin re-export layer over the centralized zustand store (store.ts).
 // Getter/setter functions are kept for backwards compatibility so existing
 // import sites don't need to change. They delegate to store.getState() and
@@ -9,22 +9,37 @@ import os from 'node:os'
 import path from 'node:path'
 import { store } from './store.js'
 
-const DEFAULT_DATA_DIR = path.join(os.homedir(), '.kimaki')
+// Default data directory: ~/.otto for new installs, falls back to ~/.kimaki
+// for existing users to preserve their database and configuration.
+const DEFAULT_DATA_DIR = (() => {
+  const home = os.homedir()
+  const ottoDirr = path.join(home, '.otto')
+  const kimakiDir = path.join(home, '.kimaki')
+  // If ~/.otto already exists, use it. If ~/.kimaki exists (legacy), use it.
+  // Otherwise default to ~/.otto for fresh installs.
+  if (fs.existsSync(ottoDirr)) {
+    return ottoDirr
+  }
+  if (fs.existsSync(kimakiDir)) {
+    return kimakiDir
+  }
+  return ottoDirr
+})()
 
 /**
  * Get the data directory path.
- * Falls back to ~/.kimaki if not explicitly set.
- * Under vitest (KIMAKI_VITEST env var), auto-creates an isolated temp dir so
- * tests never touch the real ~/.kimaki/ database. Tests that need a specific
- * dir can still call setDataDir() before any DB access to override this.
+ * Falls back to ~/.otto (or ~/.kimaki for legacy installs) if not explicitly set.
+ * Under vitest (OTTO_VITEST / KIMAKI_VITEST env var), auto-creates an isolated
+ * temp dir so tests never touch the real data directory. Tests that need a
+ * specific dir can still call setDataDir() before any DB access to override.
  */
 export function getDataDir(): string {
   const current = store.getState().dataDir
   if (current) {
     return current
   }
-  if (process.env.KIMAKI_VITEST) {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kimaki-test-'))
+  if (process.env.OTTO_VITEST || process.env.KIMAKI_VITEST) {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'otto-test-'))
     store.setState({ dataDir: tmpDir })
     return tmpDir
   }
@@ -79,12 +94,12 @@ const DEFAULT_LOCK_PORT = 29988
 
 /**
  * Derive a lock port from the data directory path.
- * If KIMAKI_LOCK_PORT is set to a valid TCP port, it takes precedence.
- * Returns 29988 for the default ~/.kimaki directory (backwards compatible).
+ * Reads OTTO_LOCK_PORT or KIMAKI_LOCK_PORT (in that order of preference).
+ * Returns a stable port for the default data directories.
  * For custom data dirs, uses a hash to generate a port in the range 30000-39999.
  */
 export function getLockPort(): number {
-  const envPortRaw = process.env['KIMAKI_LOCK_PORT']
+  const envPortRaw = process.env['OTTO_LOCK_PORT'] || process.env['KIMAKI_LOCK_PORT']
   if (envPortRaw) {
     const envPort = Number.parseInt(envPortRaw, 10)
     if (Number.isInteger(envPort) && envPort >= 1 && envPort <= 65535) {
